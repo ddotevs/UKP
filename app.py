@@ -7,12 +7,21 @@ from typing import List, Dict, Optional
 import json
 
 # Page configuration - will be updated based on auth status
-st.set_page_config(
-    page_title="UKP Kickball Roster",
-    page_icon="⚾",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+# Try to use logo, fallback to emoji if not found
+try:
+    st.set_page_config(
+        page_title="UKP Kickball Roster",
+        page_icon="static/images/logo.png",
+        layout="wide",
+        initial_sidebar_state="expanded"
+    )
+except:
+    st.set_page_config(
+        page_title="UKP Kickball Roster",
+        page_icon="⚾",
+        layout="wide",
+        initial_sidebar_state="expanded"
+    )
 
 # Database setup
 DB_NAME = "kickball_roster.db"
@@ -222,7 +231,15 @@ if is_authenticated():
 
 # Authentication sidebar
 with st.sidebar:
-    st.title("⚾ UKP Kickball Roster")
+    # Display logo in title
+    try:
+        col_logo, col_title = st.columns([0.15, 0.85])
+        with col_logo:
+            st.image("static/images/logo.png", width=60)
+        with col_title:
+            st.title("UKP Kickball Roster")
+    except:
+        st.title("⚾ UKP Kickball Roster")
     
     if not is_authenticated():
         st.subheader("Login")
@@ -259,7 +276,15 @@ with st.sidebar:
 
 # Main app content
 # Main navigation
-st.title("⚾ UKP Kickball Roster Manager")
+# Display logo instead of emoji in title
+try:
+    col_logo, col_title = st.columns([0.15, 0.85])
+    with col_logo:
+        st.image("static/images/logo.png", width=60)
+    with col_title:
+        st.title("UKP Kickball Roster Manager")
+except:
+    st.title("⚾ UKP Kickball Roster Manager")
 
 # Navigation tabs - different tabs for authenticated vs public
 if is_authenticated():
