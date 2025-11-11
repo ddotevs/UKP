@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 import pandas as pd
 from typing import List, Dict, Optional
 import json
+from urllib.parse import quote, unquote
 
 # Page configuration - will be updated based on auth status
 # Try to use logo, fallback to emoji if not found
@@ -23,6 +24,188 @@ except:
         initial_sidebar_state="expanded"
     )
 
+# Global CSS to override Streamlit's primary button color from red to green and add mobile responsiveness
+st.markdown("""
+    <style>
+    /* Override Streamlit's primary color CSS variable for all themes */
+    :root {
+        --primary-color: #28a745 !important;
+    }
+    /* Override for light theme */
+    [data-theme="light"] {
+        --primary-color: #28a745 !important;
+    }
+    /* Override for dark theme */
+    [data-theme="dark"] {
+        --primary-color: #28a745 !important;
+    }
+    /* Override Streamlit's internal theme variables */
+    [data-baseweb="theme"] {
+        --primary-color: #28a745 !important;
+    }
+    /* Override all primary button colors - replace red with green */
+    button[data-testid="baseButton-primary"],
+    button[data-testid="baseButton-primary"] *,
+    .stButton > button[data-testid="baseButton-primary"],
+    .stButton > button[data-testid="baseButton-primary"] * {
+        background-color: #28a745 !important;
+        background: #28a745 !important;
+        border-color: #28a745 !important;
+        color: white !important;
+    }
+    button[data-testid="baseButton-primary"]:hover,
+    button[data-testid="baseButton-primary"]:hover * {
+        background-color: #218838 !important;
+        background: #218838 !important;
+        border-color: #218838 !important;
+    }
+    /* Override emotion cache classes ONLY inside primary buttons */
+    button[data-testid="baseButton-primary"] [class*="st-emotion-cache"] {
+        background-color: #28a745 !important;
+        background: #28a745 !important;
+        border-color: #28a745 !important;
+        color: white !important;
+    }
+    button[data-testid="baseButton-primary"]:hover [class*="st-emotion-cache"] {
+        background-color: #218838 !important;
+        background: #218838 !important;
+        border-color: #218838 !important;
+    }
+    /* More aggressive selectors to catch all primary buttons - works in all themes */
+    button.kind-primary,
+    button[data-kind="primary"],
+    div[data-testid="stButton"] > button[data-testid="baseButton-primary"],
+    div[data-testid="stButton"] > button[data-testid="baseButton-primary"] *,
+    /* Target buttons in both light and dark themes */
+    [data-theme="light"] button[data-testid="baseButton-primary"],
+    [data-theme="dark"] button[data-testid="baseButton-primary"],
+    [data-baseweb="theme"] button[data-testid="baseButton-primary"] {
+        background-color: #28a745 !important;
+        background: #28a745 !important;
+        border-color: #28a745 !important;
+        color: white !important;
+    }
+    /* Force green on all elements inside primary buttons - all themes */
+    button[data-testid="baseButton-primary"] *,
+    button[data-testid="baseButton-primary"] * *,
+    [data-theme="light"] button[data-testid="baseButton-primary"] *,
+    [data-theme="dark"] button[data-testid="baseButton-primary"] * {
+        background-color: #28a745 !important;
+        color: white !important;
+    }
+    /* Hover states for all themes */
+    [data-theme="light"] button[data-testid="baseButton-primary"]:hover,
+    [data-theme="dark"] button[data-testid="baseButton-primary"]:hover {
+        background-color: #218838 !important;
+        background: #218838 !important;
+        border-color: #218838 !important;
+    }
+    
+    /* Mobile responsiveness */
+    @media (max-width: 768px) {
+        /* Make columns stack on mobile */
+        div[data-testid="column"] {
+            width: 100% !important;
+            margin-bottom: 0.5rem;
+        }
+        /* Reduce padding on mobile */
+        .main .block-container {
+            padding: 1rem !important;
+        }
+        /* Make buttons more touch-friendly */
+        button {
+            min-height: 44px !important;
+            padding: 0.5rem !important;
+        }
+        /* Make selectboxes more touch-friendly */
+        div[data-testid="stSelectbox"] {
+            min-height: 44px !important;
+        }
+        /* Stack player status buttons vertically on mobile */
+        div[data-testid="column"]:has(button[key*="toggle_"]) {
+            flex: 0 0 50% !important;
+            max-width: 50% !important;
+        }
+    }
+    </style>
+    <script>
+    (function() {{
+        // Force green on all primary buttons - works for all themes
+        function forceGreenButtons() {{
+            // Find all primary buttons regardless of theme
+            const allButtons = document.querySelectorAll('button[data-testid="baseButton-primary"]');
+            allButtons.forEach(btn => {{
+                // Always force green - don't check current color
+                btn.style.setProperty('background-color', '#28a745', 'important');
+                btn.style.setProperty('background', '#28a745', 'important');
+                btn.style.setProperty('border-color', '#28a745', 'important');
+                btn.style.setProperty('color', 'white', 'important');
+                
+                // Force on all child elements
+                btn.querySelectorAll('*').forEach(el => {{
+                    el.style.setProperty('background-color', '#28a745', 'important');
+                    el.style.setProperty('color', 'white', 'important');
+                }});
+            }});
+        }}
+        
+        // Also listen for theme changes
+        const themeObserver = new MutationObserver(() => {{
+            forceGreenButtons();
+        }});
+        
+        // Watch for theme attribute changes
+        if (document.documentElement) {{
+            themeObserver.observe(document.documentElement, {{
+                attributes: true,
+                attributeFilter: ['data-theme', 'class']
+            }});
+        }}
+        
+        // Style Out in selectbox buttons
+        function styleOutOptions() {{
+            // Style Out in selectbox buttons
+            document.querySelectorAll('button[data-baseweb="select"]').forEach(btn => {{
+                const text = btn.textContent || btn.innerText || '';
+                if (text.trim() === 'Out') {{
+                    btn.style.setProperty('color', '#dc3545', 'important');
+                }}
+            }});
+            // Style Out in dropdown options
+            document.querySelectorAll('li[data-baseweb="option"]').forEach(li => {{
+                const text = li.textContent || li.innerText || '';
+                if (text.trim() === 'Out') {{
+                    li.style.setProperty('color', '#dc3545', 'important');
+                    const span = li.querySelector('span, div');
+                    if (span) {{
+                        span.style.setProperty('color', '#dc3545', 'important');
+                    }}
+                }}
+            }});
+        }}
+        
+        // Run both functions
+        forceGreenButtons();
+        styleOutOptions();
+        setTimeout(() => {{ forceGreenButtons(); styleOutOptions(); }}, 100);
+        setTimeout(() => {{ forceGreenButtons(); styleOutOptions(); }}, 500);
+        setTimeout(() => {{ forceGreenButtons(); styleOutOptions(); }}, 1000);
+        
+        // Use MutationObserver to catch dynamically added buttons and theme changes
+        const observer = new MutationObserver(() => {{
+            forceGreenButtons();
+            styleOutOptions();
+        }});
+        observer.observe(document.body, {{ childList: true, subtree: true, attributes: true, attributeFilter: ['data-theme', 'class'] }});
+        
+        // Also watch the root element for theme changes
+        if (document.documentElement) {{
+            observer.observe(document.documentElement, {{ attributes: true, attributeFilter: ['data-theme', 'class'] }});
+        }}
+    }})();
+    </script>
+""", unsafe_allow_html=True)
+
 # Database setup
 DB_NAME = "kickball_roster.db"
 
@@ -30,6 +213,36 @@ def init_db():
     """Initialize the database with required tables"""
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
+    
+    # Migrate: Remove UNIQUE constraint from lineup_positions if it exists
+    try:
+        # SQLite doesn't support DROP CONSTRAINT directly, so we need to recreate the table
+        c.execute('''SELECT name FROM sqlite_master WHERE type='table' AND name='lineup_positions' ''')
+        if c.fetchone():
+            # Check if unique constraint exists by trying to insert a duplicate
+            # If it fails, we need to recreate the table
+            c.execute('''PRAGMA table_info(lineup_positions)''')
+            columns = c.fetchall()
+            # Check if we need to migrate
+            c.execute('''SELECT sql FROM sqlite_master WHERE type='table' AND name='lineup_positions' ''')
+            table_sql = c.fetchone()
+            if table_sql and 'UNIQUE(game_id, inning, position)' in table_sql[0]:
+                # Recreate table without unique constraint
+                c.execute('''CREATE TABLE IF NOT EXISTS lineup_positions_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    game_id INTEGER NOT NULL,
+                    inning INTEGER NOT NULL,
+                    position TEXT NOT NULL,
+                    player_name TEXT NOT NULL,
+                    FOREIGN KEY (game_id) REFERENCES games(id)
+                )''')
+                c.execute('''INSERT INTO lineup_positions_new SELECT * FROM lineup_positions''')
+                c.execute('''DROP TABLE lineup_positions''')
+                c.execute('''ALTER TABLE lineup_positions_new RENAME TO lineup_positions''')
+                conn.commit()
+    except Exception as e:
+        # If migration fails, continue - table might not exist yet or constraint might not exist
+        pass
     
     # Users table for authentication
     c.execute('''
@@ -94,8 +307,10 @@ def init_db():
             inning INTEGER NOT NULL CHECK(inning BETWEEN 1 AND 7),
             position TEXT NOT NULL,
             player_name TEXT,
-            FOREIGN KEY (game_id) REFERENCES games(id),
-            UNIQUE(game_id, inning, position)
+            FOREIGN KEY (game_id) REFERENCES games(id)
+            -- Removed UNIQUE constraint to allow duplicate positions
+            -- Multiple players can have the same position (for validation/testing)
+            -- Out position can have multiple players
         )
     ''')
     
@@ -382,53 +597,45 @@ if is_authenticated() and len(tabs) > 0:
         
         # Compact grid view for main roster - 12 columns with minimal padding
         st.markdown("**Main Roster**")
-        # Add very aggressive CSS for compact buttons with colors - use unique ID for specificity
-        roster_section_id = f"roster-main-{game_id}"
-        st.markdown(f"""
-            <style>
-            /* Ultra-specific selector for IN buttons - green fill */
-            #{roster_section_id} ~ * div[data-testid="column"] button[data-testid="baseButton-primary"],
-            div:has(> div:has(> div:has(button[key*="main_toggle"][data-testid="baseButton-primary"]))) button[data-testid="baseButton-primary"] {{
-                padding: 1px 3px !important;
-                font-size: 0.4rem !important;
-                min-height: 18px !important;
-                height: 18px !important;
-                line-height: 1 !important;
-                margin: 0px !important;
-                background-color: #28a745 !important;
-                background: #28a745 !important;
-                color: white !important;
-                border-color: #28a745 !important;
-                border: 1px solid #28a745 !important;
-            }}
-            #{roster_section_id} ~ * div[data-testid="column"] button[data-testid="baseButton-primary"]:hover {{
-                background-color: #218838 !important;
-                background: #218838 !important;
-                border-color: #218838 !important;
-            }}
-            /* Ultra-specific selector for OUT buttons - red border only */
-            #{roster_section_id} ~ * div[data-testid="column"] button[data-testid="baseButton-secondary"],
-            div:has(> div:has(> div:has(button[key*="main_toggle"][data-testid="baseButton-secondary"]))) button[data-testid="baseButton-secondary"] {{
-                padding: 1px 3px !important;
-                font-size: 0.4rem !important;
-                min-height: 18px !important;
-                height: 18px !important;
-                line-height: 1 !important;
-                margin: 0px !important;
-                background-color: transparent !important;
-                background: transparent !important;
-                color: #dc3545 !important;
-                border-color: #dc3545 !important;
-                border: 2px solid #dc3545 !important;
-            }}
-            #{roster_section_id} ~ * div[data-testid="column"] button[data-testid="baseButton-secondary"]:hover {{
-                background-color: rgba(220, 53, 69, 0.1) !important;
-                border-color: #c82333 !important;
-                color: #c82333 !important;
-            }}
-            </style>
-            <div id="{roster_section_id}"></div>
-        """, unsafe_allow_html=True)
+        
+        # Check for player toggle from session state FIRST (before building roster list)
+        # This ensures status is updated before we render buttons
+        if 'toggle_player' in st.session_state and st.session_state.toggle_player:
+            player_to_toggle = st.session_state.toggle_player
+            # Check if this is a substitute or main roster player
+            is_sub = player_to_toggle in substitutes
+            # Get current status from database
+            c.execute('''SELECT status FROM game_player_status 
+                       WHERE game_id = ? AND player_name = ?''', (game_id, player_to_toggle))
+            result = c.fetchone()
+            # Default status: 'IN' for main roster, 'OUT' for substitutes
+            current_status = result[0] if result else ('OUT' if is_sub else 'IN')
+            
+            # If player doesn't exist in game_player_status yet, initialize them
+            if not result:
+                c.execute('''INSERT OR IGNORE INTO game_player_status 
+                           (game_id, player_name, status, is_substitute, kicking_order) 
+                           VALUES (?, ?, ?, ?, NULL)''', 
+                         (game_id, player_to_toggle, current_status, 1 if is_sub else 0))
+                conn.commit()
+            
+            if current_status == 'IN':
+                c.execute('''INSERT OR REPLACE INTO game_player_status 
+                           (game_id, player_name, status, is_substitute, kicking_order) 
+                           VALUES (?, ?, 'OUT', ?, NULL)''', (game_id, player_to_toggle, 1 if is_sub else 0))
+                conn.commit()
+            else:
+                c.execute('''SELECT COALESCE(MAX(kicking_order), 0) 
+                            FROM game_player_status 
+                            WHERE game_id = ? AND status = 'IN' ''', (game_id,))
+                max_order = c.fetchone()[0] or 0
+                c.execute('''INSERT OR REPLACE INTO game_player_status 
+                           (game_id, player_name, status, is_substitute, kicking_order) 
+                           VALUES (?, ?, 'IN', ?, ?)''', (game_id, player_to_toggle, 1 if is_sub else 0, max_order + 1))
+                conn.commit()
+            # Clear the toggle flag and rerun
+            st.session_state.toggle_player = None
+            st.rerun()
         
         # Create grid with 12 columns for very compact display
         num_cols = 12
@@ -437,41 +644,34 @@ if is_authenticated() and len(tabs) > 0:
             current_status = statuses.get(player, {}).get('status', 'IN')
             roster_list.append((player, current_status))
         
-        # Display in compact 12-column grid - use Streamlit buttons but with absolute CSS override
-        st.markdown("""
+        # Display buttons with compact sizing (primary color handled by config.toml)
+        roster_buttons_id = f"roster-buttons-{game_id}"
+        st.markdown(f"""
             <style>
-            /* Nuclear option - target ALL buttons and override with maximum specificity */
-            button[data-testid="baseButton-primary"],
-            button[data-testid="baseButton-primary"]:hover,
-            button[data-testid="baseButton-primary"]:focus,
-            button[data-testid="baseButton-primary"]:active {
-                background: #28a745 !important;
-                background-color: #28a745 !important;
-                color: white !important;
-                border-color: #28a745 !important;
-                border: 1px solid #28a745 !important;
-                padding: 1px 3px !important;
-                font-size: 0.4rem !important;
-                min-height: 18px !important;
-                height: 18px !important;
-            }
-            button[data-testid="baseButton-secondary"],
-            button[data-testid="baseButton-secondary"]:hover,
-            button[data-testid="baseButton-secondary"]:focus,
-            button[data-testid="baseButton-secondary"]:active {
-                background: transparent !important;
+            /* Compact sizing for roster buttons - primary color comes from config.toml */
+            #{roster_buttons_id} ~ * button[data-testid="baseButton-primary"],
+            #{roster_buttons_id} ~ * button[data-testid="baseButton-secondary"] {{
+                padding: 2px 6px !important;
+                font-size: 0.7rem !important;
+                min-height: 24px !important;
+                height: 24px !important;
+                font-weight: 500 !important;
+            }}
+            /* OUT buttons (secondary) need red border styling */
+            #{roster_buttons_id} ~ * button[data-testid="baseButton-secondary"] {{
                 background-color: transparent !important;
-                color: #dc3545 !important;
                 border-color: #dc3545 !important;
                 border: 2px solid #dc3545 !important;
-                padding: 1px 3px !important;
-                font-size: 0.4rem !important;
-                min-height: 18px !important;
-                height: 18px !important;
-            }
+                color: #dc3545 !important;
+            }}
+            #{roster_buttons_id} ~ * button[data-testid="baseButton-secondary"]:hover {{
+                background-color: rgba(220, 53, 69, 0.1) !important;
+            }}
             </style>
+            <div id="{roster_buttons_id}"></div>
         """, unsafe_allow_html=True)
         
+        # Create buttons in a grid using Streamlit buttons
         for i in range(0, len(roster_list), num_cols):
             cols = st.columns(num_cols)
             for j, col in enumerate(cols):
@@ -479,24 +679,92 @@ if is_authenticated() and len(tabs) > 0:
                     player, status = roster_list[i + j]
                     with col:
                         if status == 'IN':
-                            if st.button(player, key=f"main_toggle_{player}", use_container_width=True, type="primary"):
-                                c.execute('''INSERT OR REPLACE INTO game_player_status 
-                                           (game_id, player_name, status, is_substitute, kicking_order) 
-                                           VALUES (?, ?, 'OUT', 0, NULL)''', (game_id, player))
-                                conn.commit()
+                            # Green button for IN status
+                            button_key = f"roster_toggle_in_{player}_{game_id}"
+                            if st.button(player, key=button_key, type="primary", use_container_width=True):
+                                st.session_state.toggle_player = player
                                 st.rerun()
                         else:
-                            if st.button(player, key=f"main_toggle_{player}", use_container_width=True):
-                                # Get max kicking order to add at end
-                                c.execute('''SELECT COALESCE(MAX(kicking_order), 0) 
-                                            FROM game_player_status 
-                                            WHERE game_id = ? AND status = 'IN' ''', (game_id,))
-                                max_order = c.fetchone()[0] or 0
-                                c.execute('''INSERT OR REPLACE INTO game_player_status 
-                                           (game_id, player_name, status, is_substitute, kicking_order) 
-                                           VALUES (?, ?, 'IN', 0, ?)''', (game_id, player, max_order + 1))
-                                conn.commit()
+                            # Red border button for OUT status
+                            button_key = f"roster_toggle_out_{player}_{game_id}"
+                            if st.button(player, key=button_key, type="secondary", use_container_width=True):
+                                st.session_state.toggle_player = player
                                 st.rerun()
+        
+        # Substitutes section - collapsible, default to collapsed
+        with st.expander("**Substitutes**", expanded=False):
+            if substitutes:
+                # Get current game player statuses for substitutes
+                # Initialize substitutes in game_player_status if they don't exist yet
+                sub_statuses = {}
+                for sub in substitutes:
+                    c.execute('SELECT status FROM game_player_status WHERE game_id = ? AND player_name = ?',
+                             (game_id, sub))
+                    result = c.fetchone()
+                    if result:
+                        sub_statuses[sub] = result[0]
+                    else:
+                        # Initialize substitute as OUT if not in game_player_status yet
+                        sub_statuses[sub] = 'OUT'
+                        c.execute('''INSERT OR IGNORE INTO game_player_status 
+                                   (game_id, player_name, status, is_substitute, kicking_order) 
+                                   VALUES (?, ?, 'OUT', 1, NULL)''', (game_id, sub))
+                        conn.commit()
+                
+                # Create grid with 12 columns for substitutes
+                sub_list = []
+                for sub in substitutes:
+                    current_status = sub_statuses.get(sub, 'OUT')
+                    sub_list.append((sub, current_status))
+                
+                # Compact sizing for substitutes (primary color handled by config.toml)
+                sub_buttons_id = f"sub-buttons-{game_id}"
+                st.markdown(f"""
+                    <style>
+                    /* Compact sizing for substitute buttons - primary color comes from config.toml */
+                    #{sub_buttons_id} ~ * button[data-testid="baseButton-primary"],
+                    #{sub_buttons_id} ~ * button[data-testid="baseButton-secondary"] {{
+                        padding: 2px 6px !important;
+                        font-size: 0.7rem !important;
+                        min-height: 24px !important;
+                        height: 24px !important;
+                        font-weight: 500 !important;
+                    }}
+                    /* OUT buttons (secondary) need red border styling */
+                    #{sub_buttons_id} ~ * button[data-testid="baseButton-secondary"] {{
+                        background-color: transparent !important;
+                        border-color: #dc3545 !important;
+                        border: 2px solid #dc3545 !important;
+                        color: #dc3545 !important;
+                    }}
+                    #{sub_buttons_id} ~ * button[data-testid="baseButton-secondary"]:hover {{
+                        background-color: rgba(220, 53, 69, 0.1) !important;
+                    }}
+                    </style>
+                    <div id="{sub_buttons_id}"></div>
+                """, unsafe_allow_html=True)
+                
+                # Create buttons in a grid using Streamlit buttons
+                for i in range(0, len(sub_list), num_cols):
+                    cols = st.columns(num_cols)
+                    for j, col in enumerate(cols):
+                        if i + j < len(sub_list):
+                            sub_player, sub_status = sub_list[i + j]
+                            with col:
+                                if sub_status == 'IN':
+                                    # Green button for IN status
+                                    button_key = f"sub_toggle_in_{sub_player}_{game_id}"
+                                    if st.button(sub_player, key=button_key, type="primary", use_container_width=True):
+                                        st.session_state.toggle_player = sub_player
+                                        st.rerun()
+                                else:
+                                    # Red border button for OUT status
+                                    button_key = f"sub_toggle_out_{sub_player}_{game_id}"
+                                    if st.button(sub_player, key=button_key, type="secondary", use_container_width=True):
+                                        st.session_state.toggle_player = sub_player
+                                        st.rerun()
+            else:
+                st.info("No substitutes available. Add them in the Roster tab.")
         
         st.divider()
         
@@ -557,7 +825,8 @@ if is_authenticated() and len(tabs) > 0:
         
         if available_players:
             # Create position options (including "Out") - use abbreviations for display
-            position_options = [""] + POSITIONS
+            # Move blank option to bottom
+            position_options = POSITIONS + [""]
             playing_positions = [p for p in POSITIONS if p != "Out"]
             
             # Function to check female count for an inning
@@ -593,8 +862,37 @@ if is_authenticated() and len(tabs) > 0:
                 duplicates = [row[0] for row in c.fetchall()]
                 return duplicates
             
-            # Check all warnings for all innings
+            # Function to get which players have duplicate positions in an inning
+            def get_duplicate_players_by_position(inning_num):
+                """Returns dict mapping position -> list of players who have that position"""
+                c.execute('''SELECT position, player_name 
+                            FROM lineup_positions 
+                            WHERE game_id = ? AND inning = ? AND position != 'Out' AND position != '' ''',
+                         (game_id, inning_num))
+                position_players = {}
+                for position, player in c.fetchall():
+                    if position not in position_players:
+                        position_players[position] = []
+                    position_players[position].append(player)
+                # Filter to only duplicates
+                return {pos: players for pos, players in position_players.items() if len(players) > 1}
+            
+            # Check all warnings for all innings and track duplicate positions
+            # This must be done AFTER all database updates to get current state
             inning_warnings = {}
+            duplicate_positions_by_inning = {}  # inning -> set of duplicate positions
+            duplicate_players_by_inning = {}   # inning -> dict of position -> list of players
+            
+            # Refresh lineup data from database before checking warnings
+            c.execute('''SELECT inning, position, player_name FROM lineup_positions 
+                        WHERE game_id = ? ORDER BY inning, position''', (game_id,))
+            current_lineup_refreshed = {}
+            for row in c.fetchall():
+                inning, position, player = row
+                if inning not in current_lineup_refreshed:
+                    current_lineup_refreshed[inning] = {}
+                current_lineup_refreshed[inning][position] = player
+            
             for i in range(1, 8):
                 warnings = []
                 female_count = check_female_count(i)
@@ -605,6 +903,11 @@ if is_authenticated() and len(tabs) > 0:
                 if duplicates:
                     dup_abbrevs = [POSITION_ABBREVIATIONS.get(d, d) for d in duplicates]
                     warnings.append(f"Duplicate positions: {', '.join(dup_abbrevs)}")
+                    duplicate_positions_by_inning[i] = set(duplicates)
+                    duplicate_players_by_inning[i] = get_duplicate_players_by_position(i)
+                else:
+                    duplicate_positions_by_inning[i] = set()
+                    duplicate_players_by_inning[i] = {}
                 
                 unused = get_unused_positions(i)
                 if unused:
@@ -753,20 +1056,46 @@ if is_authenticated() and len(tabs) > 0:
                 
                 for inning in range(1, 8):
                     with row_cols[inning + 2]:  # +2 because of player name (0), up (1), down (2), innings start at index 3
-                        # Get current position for this player in this inning
-                        current_position = player_positions_by_inning[inning].get(player, "")
+                        # Get current position for this player in this inning - refresh from database
+                        c.execute('''SELECT position FROM lineup_positions 
+                                    WHERE game_id = ? AND inning = ? AND player_name = ?''',
+                                 (game_id, inning, player))
+                        result = c.fetchone()
+                        current_position = result[0] if result else ""
+                        
+                        # Check if this position is a duplicate
+                        is_duplicate = current_position in duplicate_positions_by_inning.get(inning, set())
                         
                         # Create dropdown with abbreviations for display
-                        # Map full position names to abbreviations for display
-                        display_options = [""] + [POSITION_ABBREVIATIONS.get(pos, pos) for pos in POSITIONS]
+                        # Map full position names to abbreviations for display, blank at bottom
+                        display_options = [POSITION_ABBREVIATIONS.get(pos, pos) for pos in POSITIONS] + [""]
                         current_abbrev = POSITION_ABBREVIATIONS.get(current_position, current_position) if current_position else ""
+                        
+                        # Find index for current selection (blank is at the end)
+                        if current_abbrev in display_options:
+                            current_index = display_options.index(current_abbrev)
+                        else:
+                            current_index = len(display_options) - 1  # Default to blank at bottom
+                        
+                        # Add help text if duplicate
+                        help_text = ""
+                        if is_duplicate and current_position:
+                            dup_players = duplicate_players_by_inning.get(inning, {}).get(current_position, [])
+                            dup_players_str = ", ".join([p for p in dup_players if p != player])
+                            help_text = f"⚠️ DUPLICATE: {POSITION_ABBREVIATIONS.get(current_position, current_position)} also assigned to: {dup_players_str}"
+                        
+                        selectbox_key = f"lineup_{player}_{inning}"
+                        
                         selected_abbrev = st.selectbox(
                             "",
                             options=display_options,
-                            index=display_options.index(current_abbrev) if current_abbrev in display_options else 0,
-                            key=f"lineup_{player}_{inning}",
-                            label_visibility="collapsed"
+                            index=current_index,
+                            key=selectbox_key,
+                            label_visibility="collapsed",
+                            help=help_text if help_text else None
                         )
+                        
+                        # Note: Visual highlighting removed - duplicate errors shown in hover tooltip only
                         
                         # Convert abbreviation back to full position name
                         abbrev_to_full = {v: k for k, v in POSITION_ABBREVIATIONS.items()}
@@ -776,32 +1105,32 @@ if is_authenticated() and len(tabs) > 0:
                         if selected_position != current_position:
                             lineup_changed = True
                             
-                            # Remove old position assignment
+                            # Remove old position assignment for this player only
                             if current_position:
                                 c.execute('''DELETE FROM lineup_positions 
                                            WHERE game_id = ? AND inning = ? AND position = ? AND player_name = ?''',
                                          (game_id, inning, current_position, player))
                             
-                            # Check if position is already taken by another player
+                            # Add new position assignment (allow duplicates - don't remove other players)
                             if selected_position:
-                                c.execute('''SELECT player_name FROM lineup_positions 
-                                            WHERE game_id = ? AND inning = ? AND position = ?''',
-                                         (game_id, inning, selected_position))
-                                existing = c.fetchone()
-                                if existing and existing[0] != player:
-                                    # Remove old player from this position
-                                    c.execute('''DELETE FROM lineup_positions 
-                                               WHERE game_id = ? AND inning = ? AND position = ?''',
-                                             (game_id, inning, selected_position))
-                                
-                                # Add new position assignment
-                                c.execute('''INSERT OR REPLACE INTO lineup_positions 
-                                           (game_id, inning, position, player_name) 
-                                           VALUES (?, ?, ?, ?)''',
+                                # Check if this player already has this position (shouldn't happen, but be safe)
+                                c.execute('''SELECT COUNT(*) FROM lineup_positions 
+                                            WHERE game_id = ? AND inning = ? AND position = ? AND player_name = ?''',
                                          (game_id, inning, selected_position, player))
+                                exists = c.fetchone()[0] > 0
+                                
+                                if not exists:
+                                    # Add new position assignment (duplicates are allowed - multiple players can have same position)
+                                    c.execute('''INSERT INTO lineup_positions 
+                                               (game_id, inning, position, player_name) 
+                                               VALUES (?, ?, ?, ?)''',
+                                             (game_id, inning, selected_position, player))
                                 conn.commit()
                             else:
                                 conn.commit()
+                            
+                            # Force rerun to refresh all data
+                            st.rerun()
                 
                 # Sit-out count column
                 with row_cols[10]:
@@ -875,8 +1204,8 @@ if is_authenticated() and len(tabs) > 1:
         
         st.divider()
         
-        # Substitutes section
-        st.markdown("**Substitutes**")
+        # Add/Edit Substitutes
+        st.markdown("**Manage Substitutes**")
         conn_sub = sqlite3.connect(DB_NAME)
         c_sub = conn_sub.cursor()
         
@@ -884,43 +1213,6 @@ if is_authenticated() and len(tabs) > 1:
         c_sub.execute('SELECT player_name, is_female FROM substitutes ORDER BY player_name')
         substitutes_list = c_sub.fetchall()
         
-        if substitutes_list:
-            # Display substitutes in compact grid
-            # Add CSS for compact buttons - same as main roster
-            st.markdown("""
-                <style>
-                /* Target only substitute toggle buttons */
-                button[data-testid="baseButton-primary"][aria-label*="main_toggle_sub"],
-                button[data-testid="baseButton-secondary"][aria-label*="main_toggle_sub"] {
-                    padding: 0.02rem 0.15rem !important;
-                    font-size: 0.55rem !important;
-                    min-height: 0.8rem !important;
-                    line-height: 0.9 !important;
-                    vertical-align: middle !important;
-                }
-                </style>
-            """, unsafe_allow_html=True)
-            
-            sub_list = []
-            for sub_name, is_female in substitutes_list:
-                sub_list.append((sub_name, is_female))
-            
-            # Display in compact 12-column grid
-            num_cols_sub = 12
-            for i in range(0, len(sub_list), num_cols_sub):
-                cols = st.columns(num_cols_sub)
-                for j, col in enumerate(cols):
-                    if i + j < len(sub_list):
-                        sub_name, is_female = sub_list[i + j]
-                        with col:
-                            st.button(sub_name, key=f"sub_display_{sub_name}", use_container_width=True, disabled=True)
-        else:
-            st.info("No substitutes available. Add them below.")
-        
-        st.divider()
-        
-        # Add/Edit Substitutes
-        st.markdown("**Manage Substitutes**")
         with st.form("add_substitute_form"):
             new_sub_name = st.text_input("Substitute Name")
             is_female_sub = st.checkbox("Female", key="new_sub_female")
