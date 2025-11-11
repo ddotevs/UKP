@@ -90,6 +90,28 @@ def init_db():
     
     conn.commit()
     conn.close()
+    
+    # Migrate existing databases to add kicking_order column if it doesn't exist
+    migrate_db()
+
+def migrate_db():
+    """Migrate database schema for new columns"""
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    
+    # Check if kicking_order column exists in game_player_status table
+    try:
+        c.execute("PRAGMA table_info(game_player_status)")
+        columns = [row[1] for row in c.fetchall()]
+        if 'kicking_order' not in columns:
+            # Add kicking_order column
+            c.execute('ALTER TABLE game_player_status ADD COLUMN kicking_order INTEGER')
+            conn.commit()
+    except Exception as e:
+        # Table might not exist yet, which is fine
+        pass
+    
+    conn.close()
 
 def hash_password(password: str) -> str:
     """Hash a password using SHA256"""
