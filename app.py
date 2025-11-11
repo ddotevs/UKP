@@ -275,6 +275,22 @@ POSITIONS = [
     "Right Center", "Right Field", "Out"
 ]
 
+# Position abbreviations for display
+POSITION_ABBREVIATIONS = {
+    "Pitcher": "P",
+    "Catcher": "C",
+    "First Base": "1st",
+    "Second Base": "2nd",
+    "Third Base": "3rd",
+    "Short Stop": "SS",
+    "Left Field": "LF",
+    "Left Center": "LC",
+    "Center Field": "CF",
+    "Right Center": "RC",
+    "Right Field": "RF",
+    "Out": "Out"
+}
+
 # ========== GAME LINEUP TAB ==========
 if is_authenticated() and len(tabs) > 0:
     with tabs[0]:
@@ -475,9 +491,28 @@ if is_authenticated() and len(tabs) > 0:
         st.subheader("Lineup by Inning (Spreadsheet View)")
         
         if available_players:
-            # Create position options (including "Out")
+            # Create position options (including "Out") - use abbreviations for display
             position_options = [""] + POSITIONS
             playing_positions = [p for p in POSITIONS if p != "Out"]
+            
+            # Function to check female count for an inning
+            def check_female_count(inning_num):
+                c.execute('''SELECT COUNT(DISTINCT lp.player_name)
+                            FROM lineup_positions lp
+                            LEFT JOIN main_roster mr ON lp.player_name = mr.player_name
+                            LEFT JOIN substitutes s ON lp.player_name = s.player_name
+                            WHERE lp.game_id = ? AND lp.inning = ? 
+                            AND lp.position != 'Out' AND lp.position != ''
+                            AND (COALESCE(mr.is_female, 0) = 1 OR COALESCE(s.is_female, 0) = 1)''',
+                         (game_id, inning_num))
+                return c.fetchone()[0]
+            
+            # Check female counts for all innings
+            inning_warnings = {}
+            for i in range(1, 8):
+                female_count = check_female_count(i)
+                if female_count < 4:
+                    inning_warnings[i] = female_count
             
             # Create dataframe-style interface
             # Header row
@@ -488,7 +523,12 @@ if is_authenticated() and len(tabs) > 0:
                 st.markdown("**↑↓**")
             for i, col in enumerate(header_cols[3:], 1):
                 with col:
-                    st.markdown(f"**Inning {i}**")
+                    inning_num = i
+                    warning_icon = ""
+                    if inning_num in inning_warnings:
+                        female_count = inning_warnings[inning_num]
+                        warning_icon = f'<span title="⚠️ At least 4 females must be on the field. Currently {female_count} females on field for Inning {inning_num}." style="color: #ffa500; font-size: 1.2em;">⚠️</span>'
+                    st.markdown(f"**Inning {i}** {warning_icon}", unsafe_allow_html=True)
             
             # Player rows with position dropdowns and reorder buttons
             lineup_changed = False
@@ -549,18 +589,25 @@ if is_authenticated() and len(tabs) > 0:
                             st.rerun()
                 
                 for inning in range(1, 8):
-                    with row_cols[inning + 3]:  # +3 because of player name and two button columns
+                    with row_cols[inning + 2]:  # +2 because of player name (0) and two button columns (1,2), innings start at index 3
                         # Get current position for this player in this inning
                         current_position = player_positions_by_inning[inning].get(player, "")
                         
-                        # Create dropdown
-                        selected_position = st.selectbox(
+                        # Create dropdown with abbreviations for display
+                        # Map full position names to abbreviations for display
+                        display_options = [""] + [POSITION_ABBREVIATIONS.get(pos, pos) for pos in POSITIONS]
+                        current_abbrev = POSITION_ABBREVIATIONS.get(current_position, current_position) if current_position else ""
+                        selected_abbrev = st.selectbox(
                             "",
-                            options=position_options,
-                            index=position_options.index(current_position) if current_position in position_options else 0,
+                            options=display_options,
+                            index=display_options.index(current_abbrev) if current_abbrev in display_options else 0,
                             key=f"lineup_{player}_{inning}",
                             label_visibility="collapsed"
                         )
+                        
+                        # Convert abbreviation back to full position name
+                        abbrev_to_full = {v: k for k, v in POSITION_ABBREVIATIONS.items()}
+                        selected_position = abbrev_to_full.get(selected_abbrev, selected_abbrev) if selected_abbrev else ""
                         
                         # Update database if changed
                         if selected_position != current_position:
@@ -589,37 +636,7 @@ if is_authenticated() and len(tabs) > 0:
                                            (game_id, inning, position, player_name) 
                                            VALUES (?, ?, ?, ?)''',
                                          (game_id, inning, selected_position, player))
-                                
-                                # Validate female requirement if assigning to a playing position
-                                if selected_position != "Out" and selected_position != "":
-                                    # Count females currently on field for this inning
-                                    c.execute('''SELECT COUNT(DISTINCT lp.player_name)
-                                                FROM lineup_positions lp
-                                                LEFT JOIN main_roster mr ON lp.player_name = mr.player_name
-                                                LEFT JOIN substitutes s ON lp.player_name = s.player_name
-                                                WHERE lp.game_id = ? AND lp.inning = ? 
-                                                AND lp.position != 'Out' AND lp.position != ''
-                                                AND (COALESCE(mr.is_female, 0) = 1 OR COALESCE(s.is_female, 0) = 1)''',
-                                             (game_id, inning))
-                                    females_on_field = c.fetchone()[0]
-                                    
-                                    if females_on_field < 4:
-                                        # Rollback this change
-                                        c.execute('''DELETE FROM lineup_positions 
-                                                   WHERE game_id = ? AND inning = ? AND position = ? AND player_name = ?''',
-                                                 (game_id, inning, selected_position, player))
-                                        # Restore old position if it existed
-                                        if current_position:
-                                            c.execute('''INSERT OR REPLACE INTO lineup_positions 
-                                                       (game_id, inning, position, player_name) 
-                                                       VALUES (?, ?, ?, ?)''',
-                                                     (game_id, inning, current_position, player))
-                                        st.error(f"⚠️ At least 4 females must be on the field. Currently {females_on_field} females on field for Inning {inning}.")
-                                        conn.rollback()
-                                    else:
-                                        conn.commit()
-                                else:
-                                    conn.commit()
+                                conn.commit()
                             else:
                                 conn.commit()
             
@@ -818,10 +835,15 @@ with tabs[view_tab_idx]:
                     row = {"Kick Order": player_idx + 1, "Player": player}
                     for inning in range(1, 8):
                         position = player_positions_by_inning[inning].get(player, "")
-                        if position == "Out":
-                            row[f"Inning {inning}"] = f"🔴 {position}"
+                        if position:
+                            # Use abbreviation for display
+                            abbrev = POSITION_ABBREVIATIONS.get(position, position)
+                            if position == "Out":
+                                row[f"Inning {inning}"] = f"🔴 {abbrev}"
+                            else:
+                                row[f"Inning {inning}"] = abbrev
                         else:
-                            row[f"Inning {inning}"] = position if position else "-"
+                            row[f"Inning {inning}"] = "-"
                     display_data.append(row)
                 
                 df = pd.DataFrame(display_data)
