@@ -369,11 +369,12 @@ if is_authenticated() and len(tabs) > 0:
                 line-height: 1 !important;
                 margin: 0px !important;
             }
-            /* Green for IN buttons (primary type) */
+            /* Green fill for IN buttons (primary type) - players that are IN */
             div[data-testid="column"]:has(button[key*="main_toggle"]) button[kind="primary"] {
                 background-color: #28a745 !important;
                 color: white !important;
                 border-color: #28a745 !important;
+                border-width: 1px !important;
                 padding: 1px 3px !important;
                 font-size: 0.4rem !important;
                 min-height: 18px !important;
@@ -381,13 +382,16 @@ if is_authenticated() and len(tabs) > 0:
             }
             div[data-testid="column"]:has(button[key*="main_toggle"]) button[kind="primary"]:hover {
                 background-color: #218838 !important;
+                border-color: #218838 !important;
             }
-            /* Red outline for OUT buttons (secondary type) */
+            /* Red border only for OUT buttons (secondary type) - players that are OUT */
             div[data-testid="column"]:has(button[key*="main_toggle"]) button:not([kind="primary"]) {
                 background-color: transparent !important;
+                background: transparent !important;
                 color: #dc3545 !important;
                 border-color: #dc3545 !important;
                 border-width: 2px !important;
+                border-style: solid !important;
                 padding: 1px 3px !important;
                 font-size: 0.4rem !important;
                 min-height: 18px !important;
