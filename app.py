@@ -382,18 +382,21 @@ if is_authenticated() and len(tabs) > 0:
             div[data-testid="column"]:has(button[key*="main_toggle"]) button[kind="primary"]:hover {
                 background-color: #218838 !important;
             }
-            /* Red for OUT buttons (secondary type) */
+            /* Red outline for OUT buttons (secondary type) */
             div[data-testid="column"]:has(button[key*="main_toggle"]) button:not([kind="primary"]) {
-                background-color: #dc3545 !important;
-                color: white !important;
+                background-color: transparent !important;
+                color: #dc3545 !important;
                 border-color: #dc3545 !important;
+                border-width: 2px !important;
                 padding: 1px 3px !important;
                 font-size: 0.4rem !important;
                 min-height: 18px !important;
                 height: 18px !important;
             }
             div[data-testid="column"]:has(button[key*="main_toggle"]) button:not([kind="primary"]):hover {
-                background-color: #c82333 !important;
+                background-color: rgba(220, 53, 69, 0.1) !important;
+                border-color: #c82333 !important;
+                color: #c82333 !important;
             }
             </style>
             <div class="roster-buttons-wrapper">
@@ -559,6 +562,30 @@ if is_authenticated() and len(tabs) > 0:
                 st.markdown("**↑**")
             with header_cols[2]:
                 st.markdown("**↓**")
+            
+            # Single button to copy inning 1 to all other innings
+            if st.button("Copy Inning 1 to All", key="copy_all_innings", help="Copy lineup from Inning 1 to innings 2-7"):
+                # Get all positions from inning 1
+                c.execute('''SELECT position, player_name FROM lineup_positions 
+                            WHERE game_id = ? AND inning = 1''', (game_id,))
+                first_inning = c.fetchall()
+                
+                # Copy to innings 2-7
+                for inning_num in range(2, 8):
+                    # Clear current inning
+                    c.execute('''DELETE FROM lineup_positions 
+                               WHERE game_id = ? AND inning = ?''', (game_id, inning_num))
+                    
+                    # Copy positions
+                    for position, player in first_inning:
+                        if position:  # Only copy non-empty positions
+                            c.execute('''INSERT INTO lineup_positions 
+                                       (game_id, inning, position, player_name) 
+                                       VALUES (?, ?, ?, ?)''',
+                                     (game_id, inning_num, position, player))
+                conn.commit()
+                st.rerun()
+            
             for i, col in enumerate(header_cols[3:10], 1):
                 with col:
                     inning_num = i
@@ -568,26 +595,6 @@ if is_authenticated() and len(tabs) > 0:
                         warning_icon = f'<span title="{warnings_text}" style="color: #ffa500; font-size: 1.2em;">⚠️</span>'
                     
                     st.markdown(f"**Inning {i}** {warning_icon}", unsafe_allow_html=True)
-                    if inning_num > 1:
-                        if st.button("Copy", key=f"copy_inning_{inning_num}", help="Copy lineup from Inning 1"):
-                            # Copy all positions from inning 1 to this inning
-                            c.execute('''SELECT position, player_name FROM lineup_positions 
-                                        WHERE game_id = ? AND inning = 1''', (game_id,))
-                            first_inning = c.fetchall()
-                            
-                            # Clear current inning
-                            c.execute('''DELETE FROM lineup_positions 
-                                       WHERE game_id = ? AND inning = ?''', (game_id, inning_num))
-                            
-                            # Copy positions
-                            for position, player in first_inning:
-                                if position:  # Only copy non-empty positions
-                                    c.execute('''INSERT INTO lineup_positions 
-                                               (game_id, inning, position, player_name) 
-                                               VALUES (?, ?, ?, ?)''',
-                                             (game_id, inning_num, position, player))
-                            conn.commit()
-                            st.rerun()
             
             # Sit-out count header
             with header_cols[10]:
