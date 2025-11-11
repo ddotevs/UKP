@@ -439,37 +439,51 @@ if is_authenticated() and len(tabs) > 0:
                                 conn.commit()
                                 st.rerun()
         
-        # Use JavaScript to force button colors after render
+        # Use JavaScript with MutationObserver to force button colors - runs continuously
         st.markdown("""
             <script>
-            setTimeout(function() {
+            function styleRosterButtons() {
                 // Find all primary buttons (IN status) and make them green
                 document.querySelectorAll('button[data-testid="baseButton-primary"]').forEach(function(btn) {
-                    if (btn.textContent.trim() && btn.closest('div[data-testid="column"]')) {
-                        btn.style.backgroundColor = '#28a745';
-                        btn.style.color = 'white';
-                        btn.style.borderColor = '#28a745';
-                        btn.style.padding = '1px 3px';
-                        btn.style.fontSize = '0.4rem';
-                        btn.style.minHeight = '18px';
-                        btn.style.height = '18px';
+                    var text = btn.textContent.trim();
+                    if (text && btn.closest('div[data-testid="column"]') && !btn.hasAttribute('data-roster-styled')) {
+                        btn.style.setProperty('background-color', '#28a745', 'important');
+                        btn.style.setProperty('color', 'white', 'important');
+                        btn.style.setProperty('border-color', '#28a745', 'important');
+                        btn.style.setProperty('padding', '1px 3px', 'important');
+                        btn.style.setProperty('font-size', '0.4rem', 'important');
+                        btn.style.setProperty('min-height', '18px', 'important');
+                        btn.style.setProperty('height', '18px', 'important');
+                        btn.setAttribute('data-roster-styled', 'true');
                     }
                 });
                 // Find all secondary buttons (OUT status) and make them red border only
                 document.querySelectorAll('button[data-testid="baseButton-secondary"]').forEach(function(btn) {
-                    if (btn.textContent.trim() && btn.closest('div[data-testid="column"]')) {
-                        btn.style.backgroundColor = 'transparent';
-                        btn.style.color = '#dc3545';
-                        btn.style.borderColor = '#dc3545';
-                        btn.style.borderWidth = '2px';
-                        btn.style.borderStyle = 'solid';
-                        btn.style.padding = '1px 3px';
-                        btn.style.fontSize = '0.4rem';
-                        btn.style.minHeight = '18px';
-                        btn.style.height = '18px';
+                    var text = btn.textContent.trim();
+                    if (text && btn.closest('div[data-testid="column"]') && !btn.hasAttribute('data-roster-styled')) {
+                        btn.style.setProperty('background-color', 'transparent', 'important');
+                        btn.style.setProperty('color', '#dc3545', 'important');
+                        btn.style.setProperty('border-color', '#dc3545', 'important');
+                        btn.style.setProperty('border-width', '2px', 'important');
+                        btn.style.setProperty('border-style', 'solid', 'important');
+                        btn.style.setProperty('padding', '1px 3px', 'important');
+                        btn.style.setProperty('font-size', '0.4rem', 'important');
+                        btn.style.setProperty('min-height', '18px', 'important');
+                        btn.style.setProperty('height', '18px', 'important');
+                        btn.setAttribute('data-roster-styled', 'true');
                     }
                 });
-            }, 100);
+            }
+            
+            // Run immediately and on interval
+            styleRosterButtons();
+            setInterval(styleRosterButtons, 200);
+            
+            // Also watch for DOM changes
+            var observer = new MutationObserver(function(mutations) {
+                styleRosterButtons();
+            });
+            observer.observe(document.body, { childList: true, subtree: true });
             </script>
         """, unsafe_allow_html=True)
         
