@@ -350,88 +350,87 @@ if is_authenticated() and len(tabs) > 0:
                  (game_id,))
         statuses = {row[0]: {'status': row[1], 'is_sub': row[2]} for row in c.fetchall()}
         
-        # Player status management
+        # Player status management - Compact grid view
         st.subheader("Player Status")
-        col1, col2 = st.columns(2)
         
-        with col1:
-            st.markdown("### Main Roster")
-            in_players = []
-            out_players = []
-            
-            for player in main_roster:
-                current_status = statuses.get(player, {}).get('status', 'IN')
-                if current_status == 'IN':
-                    in_players.append(player)
-                else:
-                    out_players.append(player)
-            
-            # IN column
-            st.markdown("**IN (Available)**")
-            for player in in_players:
-                if st.button(f"➡️ {player}", key=f"main_in_{player}", use_container_width=True):
-                    # Get max kicking order to add at end
-                    c.execute('''SELECT COALESCE(MAX(kicking_order), 0) 
-                                FROM game_player_status 
-                                WHERE game_id = ? AND status = 'IN' ''', (game_id,))
-                    max_order = c.fetchone()[0] or 0
-                    c.execute('''INSERT OR REPLACE INTO game_player_status 
-                               (game_id, player_name, status, is_substitute, kicking_order) 
-                               VALUES (?, ?, 'OUT', 0, NULL)''', (game_id, player))
-                    conn.commit()
-                    st.rerun()
-            
-            # OUT column
-            st.markdown("**OUT (Not Available)**")
-            for player in out_players:
-                if st.button(f"⬅️ {player}", key=f"main_out_{player}", use_container_width=True):
-                    # Get max kicking order to add at end
-                    c.execute('''SELECT COALESCE(MAX(kicking_order), 0) 
-                                FROM game_player_status 
-                                WHERE game_id = ? AND status = 'IN' ''', (game_id,))
-                    max_order = c.fetchone()[0] or 0
-                    c.execute('''INSERT OR REPLACE INTO game_player_status 
-                               (game_id, player_name, status, is_substitute, kicking_order) 
-                               VALUES (?, ?, 'IN', 0, ?)''', (game_id, player, max_order + 1))
-                    conn.commit()
-                    st.rerun()
-        
-        with col2:
-            st.markdown("### Substitutes")
+        # Substitutes sidebar toggle
+        with st.expander("📋 Substitutes", expanded=False):
             if substitutes:
                 for sub in substitutes:
                     sub_status = statuses.get(sub, {}).get('status', None)
-                    if sub_status is None:
-                        if st.button(f"➕ Add {sub} to Game", key=f"add_sub_{sub}", use_container_width=True):
-                            # Get max kicking order to add at end
-                            c.execute('''SELECT COALESCE(MAX(kicking_order), 0) 
-                                        FROM game_player_status 
-                                        WHERE game_id = ? AND status = 'IN' ''', (game_id,))
-                            max_order = c.fetchone()[0] or 0
-                            c.execute('''INSERT INTO game_player_status 
-                                       (game_id, player_name, status, is_substitute, kicking_order) 
-                                       VALUES (?, ?, 'IN', 1, ?)''', (game_id, sub, max_order + 1))
-                            conn.commit()
-                            st.rerun()
-                    elif sub_status == 'IN':
-                        if st.button(f"➡️ {sub}", key=f"sub_in_{sub}", use_container_width=True):
-                            c.execute('''UPDATE game_player_status SET status = 'OUT', kicking_order = NULL 
-                                       WHERE game_id = ? AND player_name = ?''', (game_id, sub))
-                            conn.commit()
-                            st.rerun()
-                    else:
-                        if st.button(f"⬅️ {sub}", key=f"sub_out_{sub}", use_container_width=True):
-                            # Get max kicking order to add at end
-                            c.execute('''SELECT COALESCE(MAX(kicking_order), 0) 
-                                        FROM game_player_status 
-                                        WHERE game_id = ? AND status = 'IN' ''', (game_id,))
-                            max_order = c.fetchone()[0] or 0
-                            c.execute('''UPDATE game_player_status SET status = 'IN', kicking_order = ? 
-                                       WHERE game_id = ? AND player_name = ?''', (max_order + 1, game_id, sub))
-                            conn.commit()
-                            st.rerun()
+                    col1, col2 = st.columns([3, 1])
+                    with col1:
+                        st.write(sub)
+                    with col2:
+                        if sub_status is None:
+                            if st.button("Add", key=f"add_sub_{sub}", use_container_width=True):
+                                # Get max kicking order to add at end
+                                c.execute('''SELECT COALESCE(MAX(kicking_order), 0) 
+                                            FROM game_player_status 
+                                            WHERE game_id = ? AND status = 'IN' ''', (game_id,))
+                                max_order = c.fetchone()[0] or 0
+                                c.execute('''INSERT INTO game_player_status 
+                                           (game_id, player_name, status, is_substitute, kicking_order) 
+                                           VALUES (?, ?, 'IN', 1, ?)''', (game_id, sub, max_order + 1))
+                                conn.commit()
+                                st.rerun()
+                        elif sub_status == 'IN':
+                            if st.button("IN", key=f"sub_in_{sub}", use_container_width=True):
+                                c.execute('''UPDATE game_player_status SET status = 'OUT', kicking_order = NULL 
+                                           WHERE game_id = ? AND player_name = ?''', (game_id, sub))
+                                conn.commit()
+                                st.rerun()
+                        else:
+                            if st.button("OUT", key=f"sub_out_{sub}", use_container_width=True):
+                                # Get max kicking order to add at end
+                                c.execute('''SELECT COALESCE(MAX(kicking_order), 0) 
+                                            FROM game_player_status 
+                                            WHERE game_id = ? AND status = 'IN' ''', (game_id,))
+                                max_order = c.fetchone()[0] or 0
+                                c.execute('''UPDATE game_player_status SET status = 'IN', kicking_order = ? 
+                                           WHERE game_id = ? AND player_name = ?''', (max_order + 1, game_id, sub))
+                                conn.commit()
+                                st.rerun()
             else:
                 st.info("No substitutes available. Add them in the Substitutes tab.")
+        
+        # Compact grid view for main roster
+        st.markdown("**Main Roster**")
+        # Create grid with 4 columns
+        num_cols = 4
+        roster_list = []
+        for player in main_roster:
+            current_status = statuses.get(player, {}).get('status', 'IN')
+            roster_list.append((player, current_status))
+        
+        # Display in grid
+        for i in range(0, len(roster_list), num_cols):
+            cols = st.columns(num_cols)
+            for j, col in enumerate(cols):
+                if i + j < len(roster_list):
+                    player, status = roster_list[i + j]
+                    with col:
+                        if status == 'IN':
+                            if st.button("IN", key=f"main_in_{player}", use_container_width=True, type="primary"):
+                                c.execute('''INSERT OR REPLACE INTO game_player_status 
+                                           (game_id, player_name, status, is_substitute, kicking_order) 
+                                           VALUES (?, ?, 'OUT', 0, NULL)''', (game_id, player))
+                                conn.commit()
+                                st.rerun()
+                            st.caption(player)
+                        else:
+                            if st.button("OUT", key=f"main_out_{player}", use_container_width=True):
+                                # Get max kicking order to add at end
+                                c.execute('''SELECT COALESCE(MAX(kicking_order), 0) 
+                                            FROM game_player_status 
+                                            WHERE game_id = ? AND status = 'IN' ''', (game_id,))
+                                max_order = c.fetchone()[0] or 0
+                                c.execute('''INSERT OR REPLACE INTO game_player_status 
+                                           (game_id, player_name, status, is_substitute, kicking_order) 
+                                           VALUES (?, ?, 'IN', 0, ?)''', (game_id, player, max_order + 1))
+                                conn.commit()
+                                st.rerun()
+                            st.caption(player)
         
         st.divider()
         
@@ -507,12 +506,47 @@ if is_authenticated() and len(tabs) > 0:
                          (game_id, inning_num))
                 return c.fetchone()[0]
             
-            # Check female counts for all innings
+            # Function to get unused positions for an inning
+            def get_unused_positions(inning_num):
+                c.execute('''SELECT position FROM lineup_positions 
+                            WHERE game_id = ? AND inning = ? AND position != 'Out' AND position != '' ''',
+                         (game_id, inning_num))
+                filled_positions = {row[0] for row in c.fetchall()}
+                playing_positions = {p for p in POSITIONS if p != "Out"}
+                unused = playing_positions - filled_positions
+                return unused
+            
+            # Function to get duplicate positions for an inning
+            def get_duplicate_positions(inning_num):
+                c.execute('''SELECT position, COUNT(*) as cnt 
+                            FROM lineup_positions 
+                            WHERE game_id = ? AND inning = ? AND position != 'Out' AND position != '' 
+                            GROUP BY position 
+                            HAVING cnt > 1''',
+                         (game_id, inning_num))
+                duplicates = [row[0] for row in c.fetchall()]
+                return duplicates
+            
+            # Check all warnings for all innings
             inning_warnings = {}
             for i in range(1, 8):
+                warnings = []
                 female_count = check_female_count(i)
                 if female_count < 4:
-                    inning_warnings[i] = female_count
+                    warnings.append(f"Only {female_count} females on field (need 4)")
+                
+                duplicates = get_duplicate_positions(i)
+                if duplicates:
+                    dup_abbrevs = [POSITION_ABBREVIATIONS.get(d, d) for d in duplicates]
+                    warnings.append(f"Duplicate positions: {', '.join(dup_abbrevs)}")
+                
+                unused = get_unused_positions(i)
+                if unused:
+                    unused_abbrevs = [POSITION_ABBREVIATIONS.get(u, u) for u in unused]
+                    warnings.append(f"Unused positions: {', '.join(unused_abbrevs)}")
+                
+                if warnings:
+                    inning_warnings[i] = warnings
             
             # Create dataframe-style interface
             # Header row
@@ -526,9 +560,30 @@ if is_authenticated() and len(tabs) > 0:
                     inning_num = i
                     warning_icon = ""
                     if inning_num in inning_warnings:
-                        female_count = inning_warnings[inning_num]
-                        warning_icon = f'<span title="⚠️ At least 4 females must be on the field. Currently {female_count} females on field for Inning {inning_num}." style="color: #ffa500; font-size: 1.2em;">⚠️</span>'
+                        warnings_text = " | ".join(inning_warnings[inning_num])
+                        warning_icon = f'<span title="{warnings_text}" style="color: #ffa500; font-size: 1.2em;">⚠️</span>'
+                    
                     st.markdown(f"**Inning {i}** {warning_icon}", unsafe_allow_html=True)
+                    if inning_num > 1:
+                        if st.button("Copy", key=f"copy_inning_{inning_num}", help="Copy lineup from Inning 1"):
+                            # Copy all positions from inning 1 to this inning
+                            c.execute('''SELECT position, player_name FROM lineup_positions 
+                                        WHERE game_id = ? AND inning = 1''', (game_id,))
+                            first_inning = c.fetchall()
+                            
+                            # Clear current inning
+                            c.execute('''DELETE FROM lineup_positions 
+                                       WHERE game_id = ? AND inning = ?''', (game_id, inning_num))
+                            
+                            # Copy positions
+                            for position, player in first_inning:
+                                if position:  # Only copy non-empty positions
+                                    c.execute('''INSERT INTO lineup_positions 
+                                               (game_id, inning, position, player_name) 
+                                               VALUES (?, ?, ?, ?)''',
+                                             (game_id, inning_num, position, player))
+                            conn.commit()
+                            st.rerun()
             
             # Player rows with position dropdowns and reorder buttons
             lineup_changed = False
@@ -648,19 +703,6 @@ if is_authenticated() and len(tabs) > 0:
             st.divider()
             col1, col2 = st.columns(2)
             with col1:
-                # Count innings with unused positions (should have 11 playing positions filled)
-                incomplete_innings = 0
-                playing_positions = [p for p in POSITIONS if p != "Out"]
-                for inning in range(1, 8):
-                    inning_positions = current_lineup.get(inning, {})
-                    positions_filled = len([p for pos, p in inning_positions.items() 
-                                          if p and pos in playing_positions])
-                    if positions_filled < 11:
-                        incomplete_innings += 1
-                
-                st.metric("Innings with Unused Positions", incomplete_innings)
-            
-            with col2:
                 # Count players sitting out
                 c.execute('''SELECT player_name, COUNT(*) as sit_count 
                             FROM lineup_positions 
@@ -669,6 +711,14 @@ if is_authenticated() and len(tabs) > 0:
                 sit_counts = {row[0]: row[1] for row in c.fetchall()}
                 total_sits = sum(sit_counts.values())
                 st.metric("Total Player Sit-Outs", total_sits)
+            
+            with col2:
+                # Show summary of warnings
+                total_warnings = sum(len(w) for w in inning_warnings.values())
+                if total_warnings > 0:
+                    st.warning(f"⚠️ {total_warnings} warning(s) across innings - hover over ⚠️ icons for details")
+                else:
+                    st.success("✓ All innings are properly configured")
         else:
             st.info("No players available. Add players to IN status above.")
         
@@ -710,7 +760,8 @@ if is_authenticated() and len(tabs) > 1:
                     gender_indicator = "♀" if is_female else ""
                     st.write(f"{player_name} {gender_indicator}")
                 with col2:
-                    if st.button("Edit", key=f"edit_{player_name}"):
+                    gender_text = "♀" if is_female else "♂"
+                    if st.button(gender_text, key=f"toggle_{player_name}", help="Toggle gender"):
                         # Toggle gender
                         new_gender = 0 if is_female else 1
                         c.execute('UPDATE main_roster SET is_female = ? WHERE player_name = ?',
@@ -763,7 +814,8 @@ if is_authenticated() and len(tabs) > 2:
                     gender_indicator = "♀" if is_female else ""
                     st.write(f"{player_name} {gender_indicator}")
                 with col2:
-                    if st.button("Edit", key=f"edit_sub_{player_name}"):
+                    gender_text = "♀" if is_female else "♂"
+                    if st.button(gender_text, key=f"toggle_sub_{player_name}", help="Toggle gender"):
                         # Toggle gender
                         new_gender = 0 if is_female else 1
                         c.execute('UPDATE substitutes SET is_female = ? WHERE player_name = ?',
