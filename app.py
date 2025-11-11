@@ -328,7 +328,7 @@ if is_authenticated() and len(tabs) > 0:
                             # Get max kicking order to add at end
                             c.execute('''SELECT COALESCE(MAX(kicking_order), 0) 
                                         FROM game_player_status 
-                                        WHERE game_id = ? AND status = 'IN'''', (game_id,))
+                                        WHERE game_id = ? AND status = 'IN' ''', (game_id,))
                             max_order = c.fetchone()[0] or 0
                             c.execute('''INSERT INTO game_player_status 
                                        (game_id, player_name, status, is_substitute, kicking_order) 
@@ -346,7 +346,7 @@ if is_authenticated() and len(tabs) > 0:
                             # Get max kicking order to add at end
                             c.execute('''SELECT COALESCE(MAX(kicking_order), 0) 
                                         FROM game_player_status 
-                                        WHERE game_id = ? AND status = 'IN'''', (game_id,))
+                                        WHERE game_id = ? AND status = 'IN' ''', (game_id,))
                             max_order = c.fetchone()[0] or 0
                             c.execute('''UPDATE game_player_status SET status = 'IN', kicking_order = ? 
                                        WHERE game_id = ? AND player_name = ?''', (max_order + 1, game_id, sub))
