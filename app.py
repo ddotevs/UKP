@@ -357,11 +357,13 @@ if is_authenticated() and len(tabs) > 0:
         
         # Compact grid view for main roster - 12 columns with minimal padding
         st.markdown("**Main Roster**")
-        # Add very aggressive CSS for compact buttons with colors - target only roster section
-        st.markdown("""
+        # Add very aggressive CSS for compact buttons with colors - use unique ID for specificity
+        roster_section_id = f"roster-main-{game_id}"
+        st.markdown(f"""
             <style>
-            /* Target ALL buttons in columns within roster section - very aggressive */
-            div[data-testid="column"] button[data-testid="baseButton-primary"] {
+            /* Ultra-specific selector for IN buttons - green fill */
+            #{roster_section_id} ~ * div[data-testid="column"] button[data-testid="baseButton-primary"],
+            div:has(> div:has(> div:has(button[key*="main_toggle"][data-testid="baseButton-primary"]))) button[data-testid="baseButton-primary"] {{
                 padding: 1px 3px !important;
                 font-size: 0.4rem !important;
                 min-height: 18px !important;
@@ -369,16 +371,19 @@ if is_authenticated() and len(tabs) > 0:
                 line-height: 1 !important;
                 margin: 0px !important;
                 background-color: #28a745 !important;
+                background: #28a745 !important;
                 color: white !important;
                 border-color: #28a745 !important;
-                border-width: 1px !important;
-            }
-            div[data-testid="column"] button[data-testid="baseButton-primary"]:hover {
+                border: 1px solid #28a745 !important;
+            }}
+            #{roster_section_id} ~ * div[data-testid="column"] button[data-testid="baseButton-primary"]:hover {{
                 background-color: #218838 !important;
+                background: #218838 !important;
                 border-color: #218838 !important;
-            }
-            /* Red border only for OUT buttons (secondary type) - players that are OUT */
-            div[data-testid="column"] button[data-testid="baseButton-secondary"] {
+            }}
+            /* Ultra-specific selector for OUT buttons - red border only */
+            #{roster_section_id} ~ * div[data-testid="column"] button[data-testid="baseButton-secondary"],
+            div:has(> div:has(> div:has(button[key*="main_toggle"][data-testid="baseButton-secondary"]))) button[data-testid="baseButton-secondary"] {{
                 padding: 1px 3px !important;
                 font-size: 0.4rem !important;
                 min-height: 18px !important;
@@ -389,15 +394,15 @@ if is_authenticated() and len(tabs) > 0:
                 background: transparent !important;
                 color: #dc3545 !important;
                 border-color: #dc3545 !important;
-                border-width: 2px !important;
-                border-style: solid !important;
-            }
-            div[data-testid="column"] button[data-testid="baseButton-secondary"]:hover {
+                border: 2px solid #dc3545 !important;
+            }}
+            #{roster_section_id} ~ * div[data-testid="column"] button[data-testid="baseButton-secondary"]:hover {{
                 background-color: rgba(220, 53, 69, 0.1) !important;
                 border-color: #c82333 !important;
                 color: #c82333 !important;
-            }
+            }}
             </style>
+            <div id="{roster_section_id}"></div>
         """, unsafe_allow_html=True)
         
         # Create grid with 12 columns for very compact display
@@ -433,6 +438,40 @@ if is_authenticated() and len(tabs) > 0:
                                            VALUES (?, ?, 'IN', 0, ?)''', (game_id, player, max_order + 1))
                                 conn.commit()
                                 st.rerun()
+        
+        # Use JavaScript to force button colors after render
+        st.markdown("""
+            <script>
+            setTimeout(function() {
+                // Find all primary buttons (IN status) and make them green
+                document.querySelectorAll('button[data-testid="baseButton-primary"]').forEach(function(btn) {
+                    if (btn.textContent.trim() && btn.closest('div[data-testid="column"]')) {
+                        btn.style.backgroundColor = '#28a745';
+                        btn.style.color = 'white';
+                        btn.style.borderColor = '#28a745';
+                        btn.style.padding = '1px 3px';
+                        btn.style.fontSize = '0.4rem';
+                        btn.style.minHeight = '18px';
+                        btn.style.height = '18px';
+                    }
+                });
+                // Find all secondary buttons (OUT status) and make them red border only
+                document.querySelectorAll('button[data-testid="baseButton-secondary"]').forEach(function(btn) {
+                    if (btn.textContent.trim() && btn.closest('div[data-testid="column"]')) {
+                        btn.style.backgroundColor = 'transparent';
+                        btn.style.color = '#dc3545';
+                        btn.style.borderColor = '#dc3545';
+                        btn.style.borderWidth = '2px';
+                        btn.style.borderStyle = 'solid';
+                        btn.style.padding = '1px 3px';
+                        btn.style.fontSize = '0.4rem';
+                        btn.style.minHeight = '18px';
+                        btn.style.height = '18px';
+                    }
+                });
+            }, 100);
+            </script>
+        """, unsafe_allow_html=True)
         
         st.divider()
         
