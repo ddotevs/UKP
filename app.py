@@ -264,6 +264,8 @@ st.title("⚾ UKP Kickball Roster Manager")
 # Navigation tabs - different tabs for authenticated vs public
 if is_authenticated():
     tabs = st.tabs(["Game Lineup", "Roster", "View Lineup"])
+    # Default to Game Lineup tab (index 0) for logged in users
+    # Streamlit tabs default to first tab, so this is already correct
 else:
     st.info("👀 **View Mode**: You are viewing in read-only mode. Please login to edit.")
     tabs = st.tabs(["View Lineup"])
@@ -355,23 +357,43 @@ if is_authenticated() and len(tabs) > 0:
         
         # Compact grid view for main roster - 12 columns with minimal padding
         st.markdown("**Main Roster**")
-        # Add CSS for compact buttons - use class-based approach
+        # Add very aggressive CSS for compact buttons with colors - target only roster section
         st.markdown("""
             <style>
-            /* Use a wrapper class to target buttons */
-            .roster-buttons-wrapper button {
-                padding: 0.01rem 0.1rem !important;
-                font-size: 0.5rem !important;
-                min-height: 0.7rem !important;
-                line-height: 0.85 !important;
-                vertical-align: middle !important;
-            }
-            /* Direct targeting for all buttons in roster section */
+            /* Target buttons in Main Roster section only - very specific */
             div[data-testid="column"]:has(button[key*="main_toggle"]) button {
-                padding: 0.01rem 0.1rem !important;
-                font-size: 0.5rem !important;
-                min-height: 0.7rem !important;
-                line-height: 0.85 !important;
+                padding: 1px 3px !important;
+                font-size: 0.4rem !important;
+                min-height: 18px !important;
+                height: 18px !important;
+                line-height: 1 !important;
+                margin: 0px !important;
+            }
+            /* Green for IN buttons (primary type) */
+            div[data-testid="column"]:has(button[key*="main_toggle"]) button[kind="primary"] {
+                background-color: #28a745 !important;
+                color: white !important;
+                border-color: #28a745 !important;
+                padding: 1px 3px !important;
+                font-size: 0.4rem !important;
+                min-height: 18px !important;
+                height: 18px !important;
+            }
+            div[data-testid="column"]:has(button[key*="main_toggle"]) button[kind="primary"]:hover {
+                background-color: #218838 !important;
+            }
+            /* Red for OUT buttons (secondary type) */
+            div[data-testid="column"]:has(button[key*="main_toggle"]) button:not([kind="primary"]) {
+                background-color: #dc3545 !important;
+                color: white !important;
+                border-color: #dc3545 !important;
+                padding: 1px 3px !important;
+                font-size: 0.4rem !important;
+                min-height: 18px !important;
+                height: 18px !important;
+            }
+            div[data-testid="column"]:has(button[key*="main_toggle"]) button:not([kind="primary"]):hover {
+                background-color: #c82333 !important;
             }
             </style>
             <div class="roster-buttons-wrapper">
