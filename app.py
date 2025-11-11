@@ -6,7 +6,7 @@ import pandas as pd
 from typing import List, Dict, Optional
 import json
 
-# Page configuration
+# Page configuration - will be updated based on auth status
 st.set_page_config(
     page_title="UKP Kickball Roster",
     page_icon="⚾",
@@ -36,6 +36,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS main_roster (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             player_name TEXT UNIQUE NOT NULL,
+            is_female BOOLEAN DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
@@ -45,6 +46,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS substitutes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             player_name TEXT UNIQUE NOT NULL,
+            is_female BOOLEAN DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
@@ -109,6 +111,28 @@ def migrate_db():
             conn.commit()
     except Exception as e:
         # Table might not exist yet, which is fine
+        pass
+    
+    # Check if is_female column exists in main_roster table
+    try:
+        c.execute("PRAGMA table_info(main_roster)")
+        columns = [row[1] for row in c.fetchall()]
+        if 'is_female' not in columns:
+            # Add is_female column
+            c.execute('ALTER TABLE main_roster ADD COLUMN is_female BOOLEAN DEFAULT 0')
+            conn.commit()
+    except Exception as e:
+        pass
+    
+    # Check if is_female column exists in substitutes table
+    try:
+        c.execute("PRAGMA table_info(substitutes)")
+        columns = [row[1] for row in c.fetchall()]
+        if 'is_female' not in columns:
+            # Add is_female column
+            c.execute('ALTER TABLE substitutes ADD COLUMN is_female BOOLEAN DEFAULT 0')
+            conn.commit()
+    except Exception as e:
         pass
     
     conn.close()
@@ -179,6 +203,22 @@ if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
 if 'current_game_id' not in st.session_state:
     st.session_state.current_game_id = None
+if 'sidebar_collapsed' not in st.session_state:
+    st.session_state.sidebar_collapsed = False
+
+# Collapse sidebar if authenticated - using Streamlit's built-in method
+if is_authenticated():
+    # Hide sidebar using CSS
+    st.markdown("""
+        <style>
+        section[data-testid="stSidebar"] {
+            display: none;
+        }
+        section[data-testid="stSidebar"] ~ div {
+            margin-left: 0rem;
+        }
+        </style>
+    """, unsafe_allow_html=True)
 
 # Authentication sidebar
 with st.sidebar:
@@ -424,26 +464,49 @@ if is_authenticated() and len(tabs) > 0:
                 if player:
                     player_positions_by_inning[inning][player] = position
         
-        # Kicking Order Management
-        st.subheader("Kicking Order")
-        st.caption("Drag players to reorder, or use the buttons below")
+        # Get player gender information
+        c.execute('''SELECT player_name, is_female FROM main_roster''')
+        main_roster_genders = {row[0]: bool(row[1]) for row in c.fetchall()}
+        c.execute('''SELECT player_name, is_female FROM substitutes''')
+        sub_genders = {row[0]: bool(row[1]) for row in c.fetchall()}
+        player_genders = {**main_roster_genders, **sub_genders}
         
-        # Display current order with reorder buttons
+        # Lineup interface - Spreadsheet style
+        st.subheader("Lineup by Inning (Spreadsheet View)")
+        
         if available_players:
-            col1, col2, col3 = st.columns([3, 1, 1])
-            with col1:
-                st.markdown("**Current Kicking Order:**")
+            # Create position options (including "Out")
+            position_options = [""] + POSITIONS
+            playing_positions = [p for p in POSITIONS if p != "Out"]
             
-            # Create reorder interface
-            for idx, player in enumerate(available_players):
-                col1, col2, col3, col4 = st.columns([4, 1, 1, 1])
-                with col1:
-                    st.write(f"{idx + 1}. {player}")
-                with col2:
-                    if idx > 0:
+            # Create dataframe-style interface
+            # Header row
+            header_cols = st.columns([3, 0.5, 0.5] + [1] * 7)  # Player name + up/down buttons + 7 innings
+            with header_cols[0]:
+                st.markdown("**Player**")
+            with header_cols[1]:
+                st.markdown("**↑↓**")
+            for i, col in enumerate(header_cols[3:], 1):
+                with col:
+                    st.markdown(f"**Inning {i}**")
+            
+            # Player rows with position dropdowns and reorder buttons
+            lineup_changed = False
+            order_changed = False
+            for player_idx, player in enumerate(available_players):
+                row_cols = st.columns([3, 0.5, 0.5] + [1] * 7)
+                
+                with row_cols[0]:
+                    is_female = player_genders.get(player, False)
+                    gender_indicator = "♀" if is_female else ""
+                    st.write(f"{player_idx + 1}. {player} {gender_indicator}")
+                
+                # Up/Down buttons for reordering
+                with row_cols[1]:
+                    if player_idx > 0:
                         if st.button("↑", key=f"move_up_{player}", help="Move up"):
                             # Swap with player above
-                            prev_player = available_players[idx - 1]
+                            prev_player = available_players[player_idx - 1]
                             # Get current orders
                             c.execute('''SELECT kicking_order FROM game_player_status 
                                         WHERE game_id = ? AND player_name = ?''', (game_id, player))
@@ -459,12 +522,14 @@ if is_authenticated() and len(tabs) > 0:
                                         WHERE game_id = ? AND player_name = ?''',
                                      (current_order, game_id, prev_player))
                             conn.commit()
+                            order_changed = True
                             st.rerun()
-                with col3:
-                    if idx < len(available_players) - 1:
+                
+                with row_cols[2]:
+                    if player_idx < len(available_players) - 1:
                         if st.button("↓", key=f"move_down_{player}", help="Move down"):
                             # Swap with player below
-                            next_player = available_players[idx + 1]
+                            next_player = available_players[player_idx + 1]
                             # Get current orders
                             c.execute('''SELECT kicking_order FROM game_player_status 
                                         WHERE game_id = ? AND player_name = ?''', (game_id, player))
@@ -480,38 +545,11 @@ if is_authenticated() and len(tabs) > 0:
                                         WHERE game_id = ? AND player_name = ?''',
                                      (current_order, game_id, next_player))
                             conn.commit()
+                            order_changed = True
                             st.rerun()
-        else:
-            st.info("No players available. Add players to IN status above.")
-        
-        st.divider()
-        
-        # Lineup interface - Spreadsheet style
-        st.subheader("Lineup by Inning (Spreadsheet View)")
-        
-        if available_players:
-            # Create position options (including "Out")
-            position_options = [""] + POSITIONS
-            
-            # Create dataframe-style interface
-            # Header row
-            header_cols = st.columns([2] + [1] * 7)  # Player name + 7 innings
-            with header_cols[0]:
-                st.markdown("**Player**")
-            for i, col in enumerate(header_cols[1:], 1):
-                with col:
-                    st.markdown(f"**Inning {i}**")
-            
-            # Player rows with position dropdowns
-            lineup_changed = False
-            for player_idx, player in enumerate(available_players):
-                row_cols = st.columns([2] + [1] * 7)
-                
-                with row_cols[0]:
-                    st.write(f"{player_idx + 1}. {player}")
                 
                 for inning in range(1, 8):
-                    with row_cols[inning]:
+                    with row_cols[inning + 3]:  # +3 because of player name and two button columns
                         # Get current position for this player in this inning
                         current_position = player_positions_by_inning[inning].get(player, "")
                         
@@ -527,15 +565,15 @@ if is_authenticated() and len(tabs) > 0:
                         # Update database if changed
                         if selected_position != current_position:
                             lineup_changed = True
+                            
                             # Remove old position assignment
                             if current_position:
                                 c.execute('''DELETE FROM lineup_positions 
-                                           WHERE game_id = ? AND inning = ? AND position = ?''',
-                                         (game_id, inning, current_position))
+                                           WHERE game_id = ? AND inning = ? AND position = ? AND player_name = ?''',
+                                         (game_id, inning, current_position, player))
                             
-                            # Add new position assignment
+                            # Check if position is already taken by another player
                             if selected_position:
-                                # Check if position is already taken by another player
                                 c.execute('''SELECT player_name FROM lineup_positions 
                                             WHERE game_id = ? AND inning = ? AND position = ?''',
                                          (game_id, inning, selected_position))
@@ -546,15 +584,48 @@ if is_authenticated() and len(tabs) > 0:
                                                WHERE game_id = ? AND inning = ? AND position = ?''',
                                              (game_id, inning, selected_position))
                                 
-                                # Assign player to position
+                                # Add new position assignment
                                 c.execute('''INSERT OR REPLACE INTO lineup_positions 
                                            (game_id, inning, position, player_name) 
                                            VALUES (?, ?, ?, ?)''',
                                          (game_id, inning, selected_position, player))
+                                
+                                # Validate female requirement if assigning to a playing position
+                                if selected_position != "Out" and selected_position != "":
+                                    # Count females currently on field for this inning
+                                    c.execute('''SELECT COUNT(DISTINCT lp.player_name)
+                                                FROM lineup_positions lp
+                                                LEFT JOIN main_roster mr ON lp.player_name = mr.player_name
+                                                LEFT JOIN substitutes s ON lp.player_name = s.player_name
+                                                WHERE lp.game_id = ? AND lp.inning = ? 
+                                                AND lp.position != 'Out' AND lp.position != ''
+                                                AND (COALESCE(mr.is_female, 0) = 1 OR COALESCE(s.is_female, 0) = 1)''',
+                                             (game_id, inning))
+                                    females_on_field = c.fetchone()[0]
+                                    
+                                    if females_on_field < 4:
+                                        # Rollback this change
+                                        c.execute('''DELETE FROM lineup_positions 
+                                                   WHERE game_id = ? AND inning = ? AND position = ? AND player_name = ?''',
+                                                 (game_id, inning, selected_position, player))
+                                        # Restore old position if it existed
+                                        if current_position:
+                                            c.execute('''INSERT OR REPLACE INTO lineup_positions 
+                                                       (game_id, inning, position, player_name) 
+                                                       VALUES (?, ?, ?, ?)''',
+                                                     (game_id, inning, current_position, player))
+                                        st.error(f"⚠️ At least 4 females must be on the field. Currently {females_on_field} females on field for Inning {inning}.")
+                                        conn.rollback()
+                                    else:
+                                        conn.commit()
+                                else:
+                                    conn.commit()
+                            else:
+                                conn.commit()
             
-            if lineup_changed:
-                conn.commit()
-                st.success("Lineup updated!")
+            if lineup_changed and not order_changed:
+                # Only show success if lineup changed but order didn't (to avoid double messages)
+                pass
             
             # Statistics
             st.divider()
@@ -597,11 +668,13 @@ if is_authenticated() and len(tabs) > 1:
         # Add new player
         with st.form("add_player_form"):
             new_player = st.text_input("Add New Player to Main Roster")
+            is_female = st.checkbox("Female", key="new_player_female")
             submit = st.form_submit_button("Add Player")
             
             if submit and new_player:
                 try:
-                    c.execute('INSERT INTO main_roster (player_name) VALUES (?)', (new_player,))
+                    c.execute('INSERT INTO main_roster (player_name, is_female) VALUES (?, ?)', 
+                             (new_player, 1 if is_female else 0))
                     conn.commit()
                     st.success(f"Added {new_player} to main roster!")
                     st.rerun()
@@ -609,18 +682,27 @@ if is_authenticated() and len(tabs) > 1:
                     st.error(f"{new_player} is already in the roster.")
         
         # Display current roster
-        c.execute('SELECT player_name FROM main_roster ORDER BY player_name')
-        roster = [row[0] for row in c.fetchall()]
+        c.execute('SELECT player_name, is_female FROM main_roster ORDER BY player_name')
+        roster = c.fetchall()
         
         if roster:
             st.subheader("Current Roster")
-            for player in roster:
-                col1, col2 = st.columns([4, 1])
+            for player_name, is_female in roster:
+                col1, col2, col3 = st.columns([3, 1, 1])
                 with col1:
-                    st.write(player)
+                    gender_indicator = "♀" if is_female else ""
+                    st.write(f"{player_name} {gender_indicator}")
                 with col2:
-                    if st.button("Delete", key=f"del_{player}"):
-                        c.execute('DELETE FROM main_roster WHERE player_name = ?', (player,))
+                    if st.button("Edit", key=f"edit_{player_name}"):
+                        # Toggle gender
+                        new_gender = 0 if is_female else 1
+                        c.execute('UPDATE main_roster SET is_female = ? WHERE player_name = ?',
+                                 (new_gender, player_name))
+                        conn.commit()
+                        st.rerun()
+                with col3:
+                    if st.button("Delete", key=f"del_{player_name}"):
+                        c.execute('DELETE FROM main_roster WHERE player_name = ?', (player_name,))
                         conn.commit()
                         st.rerun()
         else:
@@ -639,11 +721,13 @@ if is_authenticated() and len(tabs) > 2:
         # Add new substitute
         with st.form("add_substitute_form"):
             new_sub = st.text_input("Add New Substitute Player")
+            is_female = st.checkbox("Female", key="new_sub_female")
             submit = st.form_submit_button("Add Substitute")
             
             if submit and new_sub:
                 try:
-                    c.execute('INSERT INTO substitutes (player_name) VALUES (?)', (new_sub,))
+                    c.execute('INSERT INTO substitutes (player_name, is_female) VALUES (?, ?)', 
+                             (new_sub, 1 if is_female else 0))
                     conn.commit()
                     st.success(f"Added {new_sub} as substitute!")
                     st.rerun()
@@ -651,18 +735,27 @@ if is_authenticated() and len(tabs) > 2:
                     st.error(f"{new_sub} is already in substitutes.")
         
         # Display current substitutes
-        c.execute('SELECT player_name FROM substitutes ORDER BY player_name')
-        subs = [row[0] for row in c.fetchall()]
+        c.execute('SELECT player_name, is_female FROM substitutes ORDER BY player_name')
+        subs = c.fetchall()
         
         if subs:
             st.subheader("Current Substitutes")
-            for sub in subs:
-                col1, col2 = st.columns([4, 1])
+            for player_name, is_female in subs:
+                col1, col2, col3 = st.columns([3, 1, 1])
                 with col1:
-                    st.write(sub)
+                    gender_indicator = "♀" if is_female else ""
+                    st.write(f"{player_name} {gender_indicator}")
                 with col2:
-                    if st.button("Delete", key=f"del_sub_{sub}"):
-                        c.execute('DELETE FROM substitutes WHERE player_name = ?', (sub,))
+                    if st.button("Edit", key=f"edit_sub_{player_name}"):
+                        # Toggle gender
+                        new_gender = 0 if is_female else 1
+                        c.execute('UPDATE substitutes SET is_female = ? WHERE player_name = ?',
+                                 (new_gender, player_name))
+                        conn.commit()
+                        st.rerun()
+                with col3:
+                    if st.button("Delete", key=f"del_sub_{player_name}"):
+                        c.execute('DELETE FROM substitutes WHERE player_name = ?', (player_name,))
                         conn.commit()
                         st.rerun()
         else:
