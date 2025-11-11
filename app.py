@@ -394,44 +394,16 @@ if is_authenticated() and len(tabs) > 0:
             else:
                 st.info("No substitutes available. Add them in the Substitutes tab.")
         
-        # Compact grid view for main roster - 6 columns with reduced padding
+        # Compact grid view for main roster - 12 columns with minimal padding
         st.markdown("**Main Roster**")
-        # Add CSS for button styling with reduced padding
-        st.markdown("""
-            <style>
-            button[kind="primary"] {
-                background-color: #28a745 !important;
-                color: white !important;
-                border-color: #28a745 !important;
-                padding: 0.25rem 0.5rem !important;
-                font-size: 0.85rem !important;
-            }
-            button[kind="primary"]:hover {
-                background-color: #218838 !important;
-            }
-            /* Style OUT buttons with less aggressive red */
-            button:not([kind="primary"]) {
-                background-color: #ff6b6b !important;
-                color: white !important;
-                border-color: #ff6b6b !important;
-                opacity: 0.85;
-                padding: 0.25rem 0.5rem !important;
-                font-size: 0.85rem !important;
-            }
-            button:not([kind="primary"]):hover {
-                opacity: 1;
-            }
-            </style>
-        """, unsafe_allow_html=True)
-        
-        # Create grid with 6 columns for compact display
-        num_cols = 6
+        # Create grid with 12 columns for very compact display
+        num_cols = 12
         roster_list = []
         for player in main_roster:
             current_status = statuses.get(player, {}).get('status', 'IN')
             roster_list.append((player, current_status))
         
-        # Display in compact 6-column grid
+        # Display in compact 12-column grid - buttons will be naturally smaller with 12 columns
         for i in range(0, len(roster_list), num_cols):
             cols = st.columns(num_cols)
             for j, col in enumerate(cols):
@@ -457,7 +429,6 @@ if is_authenticated() and len(tabs) > 0:
                                            VALUES (?, ?, 'IN', 0, ?)''', (game_id, player, max_order + 1))
                                 conn.commit()
                                 st.rerun()
-        
         st.divider()
         
         # Get available players (IN status) with kicking order
@@ -575,15 +546,17 @@ if is_authenticated() and len(tabs) > 0:
                     inning_warnings[i] = warnings
             
             # Create dataframe-style interface
-            # Header row - with order buttons and sit-out count
-            header_cols = st.columns([2, 0.4, 0.4] + [1] * 7 + [0.6])  # Player + up/down + 7 innings + sit-out count
+            # Header row - with order input, buttons and sit-out count
+            header_cols = st.columns([2, 0.3, 0.3, 0.3] + [1] * 7 + [0.6])  # Player + order + up/down + 7 innings + sit-out count
             with header_cols[0]:
-                st.markdown("**Player**")
+                st.markdown("**Player** (drag to reorder)")
             with header_cols[1]:
-                st.markdown("**↑**")
+                st.markdown("**#**")
             with header_cols[2]:
+                st.markdown("**↑**")
+            with header_cols[3]:
                 st.markdown("**↓**")
-            for i, col in enumerate(header_cols[3:10], 1):
+            for i, col in enumerate(header_cols[4:11], 1):
                 with col:
                     inning_num = i
                     warning_icon = ""
@@ -614,7 +587,7 @@ if is_authenticated() and len(tabs) > 0:
                             st.rerun()
             
             # Sit-out count header
-            with header_cols[10]:
+            with header_cols[11]:
                 st.markdown("**Out**")
             
             # Player rows with position dropdowns and drag-and-drop ordering
@@ -646,17 +619,154 @@ if is_authenticated() and len(tabs) > 0:
                         GROUP BY player_name''', (game_id,))
             sit_out_counts = {row[0]: row[1] for row in c.fetchall()}
             
-            # Player rows with position dropdowns and reorder buttons
+            # Add drag-and-drop JavaScript
+            st.markdown("""
+                <script>
+                function initDragAndDrop() {
+                    // This will be handled via a custom component approach
+                    // For now, we'll use a simpler solution with hidden inputs
+                }
+                </script>
+            """, unsafe_allow_html=True)
+            
+            # Create draggable player list with improved styling
+            st.markdown("""
+                <style>
+                .draggable-row {
+                    cursor: move;
+                    padding: 4px 8px;
+                    margin: 2px 0;
+                    border: 1px solid #e0e0e0;
+                    border-radius: 4px;
+                    background: #f8f9fa;
+                    user-select: none;
+                }
+                .draggable-row:hover {
+                    background: #e9ecef;
+                    border-color: #007bff;
+                }
+                .draggable-row.dragging {
+                    opacity: 0.5;
+                    border: 2px dashed #007bff;
+                    background: #e3f2fd;
+                }
+                .draggable-row.drag-over {
+                    border-top: 3px solid #007bff;
+                }
+                </style>
+            """, unsafe_allow_html=True)
+            
+            # Store current order in session state for drag-and-drop
+            drag_state_key = f"drag_state_{game_id}"
+            if drag_state_key not in st.session_state:
+                st.session_state[drag_state_key] = available_players_sorted.copy()
+            
+            # Check if order was changed via drag-and-drop (using number inputs as fallback)
+            # Add drag-and-drop JavaScript implementation
+            st.markdown("""
+                <script>
+                document.addEventListener('DOMContentLoaded', function() {
+                    const rows = document.querySelectorAll('.draggable-row');
+                    let draggedElement = null;
+                    
+                    rows.forEach(row => {
+                        row.addEventListener('dragstart', function(e) {
+                            draggedElement = this;
+                            this.classList.add('dragging');
+                            e.dataTransfer.effectAllowed = 'move';
+                            e.dataTransfer.setData('text/html', this.innerHTML);
+                        });
+                        
+                        row.addEventListener('dragend', function(e) {
+                            this.classList.remove('dragging');
+                        });
+                        
+                        row.addEventListener('dragover', function(e) {
+                            if (e.preventDefault) {
+                                e.preventDefault();
+                            }
+                            e.dataTransfer.dropEffect = 'move';
+                            return false;
+                        });
+                        
+                        row.addEventListener('dragenter', function(e) {
+                            this.classList.add('drag-over');
+                        });
+                        
+                        row.addEventListener('dragleave', function(e) {
+                            this.classList.remove('drag-over');
+                        });
+                        
+                        row.addEventListener('drop', function(e) {
+                            if (e.stopPropagation) {
+                                e.stopPropagation();
+                            }
+                            
+                            if (draggedElement !== this) {
+                                // Swap the elements
+                                const allRows = Array.from(rows);
+                                const draggedIndex = allRows.indexOf(draggedElement);
+                                const targetIndex = allRows.indexOf(this);
+                                
+                                // Trigger a Streamlit rerun with new order
+                                // We'll use a hidden input to communicate the change
+                                const draggedPlayer = draggedElement.getAttribute('data-player');
+                                const targetPlayer = this.getAttribute('data-player');
+                                
+                                // Store swap info in sessionStorage to be read by Streamlit
+                                sessionStorage.setItem('player_swap', JSON.stringify({
+                                    dragged: draggedPlayer,
+                                    target: targetPlayer
+                                }));
+                                
+                                // Trigger page reload to process the swap
+                                window.location.reload();
+                            }
+                            
+                            this.classList.remove('drag-over');
+                            return false;
+                        });
+                    });
+                });
+                </script>
+            """, unsafe_allow_html=True)
+            
+            # Player rows with position dropdowns and drag-and-drop ordering
             for player_idx, player in enumerate(available_players_sorted):
-                row_cols = st.columns([2, 0.4, 0.4] + [1] * 7 + [0.6])
+                row_cols = st.columns([2, 0.3, 0.3, 0.3] + [1] * 7 + [0.6])
                 
                 with row_cols[0]:
                     is_female = player_genders.get(player, False)
                     gender_indicator = "♀" if is_female else ""
-                    st.write(f"{player_idx + 1}. {player} {gender_indicator}")
+                    # Make draggable with visual indicator
+                    st.markdown(f'<div class="draggable-row" draggable="true" data-player="{player}">{player_idx + 1}. {player} {gender_indicator} ⋮⋮</div>', 
+                              unsafe_allow_html=True)
+                
+                # Order number input for drag-and-drop
+                with row_cols[1]:
+                    current_order = player_orders.get(player, player_idx + 1)
+                    max_order = len(available_players)
+                    clamped_order = min(max(1, current_order), max_order)
+                    new_order = st.number_input(
+                        "",
+                        min_value=1,
+                        max_value=max_order,
+                        value=clamped_order,
+                        key=f"order_drag_{player}_{game_id}",
+                        label_visibility="collapsed",
+                        step=1
+                    )
+                    if new_order != current_order:
+                        # Update order in database
+                        c.execute('''UPDATE game_player_status SET kicking_order = ? 
+                                    WHERE game_id = ? AND player_name = ?''',
+                                 (new_order, game_id, player))
+                        conn.commit()
+                        order_changed = True
+                        st.rerun()
                 
                 # Up button for reordering
-                with row_cols[1]:
+                with row_cols[2]:
                     if player_idx > 0:
                         if st.button("↑", key=f"move_up_{player}", help="Move up"):
                             # Swap with player above
@@ -680,7 +790,7 @@ if is_authenticated() and len(tabs) > 0:
                             st.rerun()
                 
                 # Down button for reordering
-                with row_cols[2]:
+                with row_cols[3]:
                     if player_idx < len(available_players_sorted) - 1:
                         if st.button("↓", key=f"move_down_{player}", help="Move down"):
                             # Swap with player below
@@ -704,7 +814,7 @@ if is_authenticated() and len(tabs) > 0:
                             st.rerun()
                 
                 for inning in range(1, 8):
-                    with row_cols[inning + 2]:  # +2 because of player name (0), up (1), down (2), innings start at index 3
+                    with row_cols[inning + 3]:  # +3 because of player name (0), order input (1), up (2), down (3), innings start at index 4
                         # Get current position for this player in this inning
                         current_position = player_positions_by_inning[inning].get(player, "")
                         
@@ -756,7 +866,7 @@ if is_authenticated() and len(tabs) > 0:
                                 conn.commit()
                 
                 # Sit-out count column
-                with row_cols[10]:
+                with row_cols[11]:
                     sit_count = sit_out_counts.get(player, 0)
                     if sit_count > 0:
                         st.markdown(f"<div style='text-align: center; color: #ff6b6b; font-weight: bold;'>{sit_count}</div>", 
