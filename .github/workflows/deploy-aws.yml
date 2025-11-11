@@ -1,0 +1,106 @@
+name: Deploy to AWS App Runner
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:  # Allows manual trigger
+
+env:
+  AWS_REGION: us-east-1  # Change to your preferred region
+  ECR_REPOSITORY: ukp-app
+  APP_RUNNER_SERVICE: ukp-service
+
+jobs:
+  deploy:
+    name: Build and Deploy
+    runs-on: ubuntu-latest
+    
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push image to Amazon ECR
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          # Build Docker image
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          
+          # Push both tags
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+      - name: Update App Runner service
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+          IMAGE_URI: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+        run: |
+          # Get current service configuration
+          SERVICE_ARN=$(aws apprunner list-services --region ${{ env.AWS_REGION }} --query "ServiceSummaryList[?ServiceName=='${{ env.APP_RUNNER_SERVICE }}'].ServiceArn" --output text)
+          
+          if [ -z "$SERVICE_ARN" ]; then
+            echo "Service not found. Please run setup-aws.sh first to create the App Runner service."
+            exit 1
+          fi
+          
+          # Get current service config
+          aws apprunner describe-service --service-arn "$SERVICE_ARN" --region ${{ env.AWS_REGION }} > /tmp/service-config.json
+          
+          # Update service source configuration with new image
+          cat > /tmp/new-source-config.json <<EOF
+          {
+            "ImageRepository": {
+              "ImageIdentifier": "$IMAGE_URI",
+              "ImageConfiguration": {
+                "Port": "8501",
+                "RuntimeEnvironmentVariables": {
+                  "STREAMLIT_SERVER_PORT": "8501",
+                  "STREAMLIT_SERVER_ADDRESS": "0.0.0.0",
+                  "STREAMLIT_SERVER_HEADLESS": "true"
+                }
+              },
+              "ImageRepositoryType": "ECR"
+            },
+            "AutoDeploymentsEnabled": false
+          }
+          EOF
+          
+          # Update and deploy
+          aws apprunner update-service \
+            --service-arn "$SERVICE_ARN" \
+            --source-configuration file:///tmp/new-source-config.json \
+            --region ${{ env.AWS_REGION }}
+          
+          echo "✅ Service updated. Deployment will start automatically."
+
+      - name: Get App Runner service URL
+        id: get-url
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          SERVICE_ARN=$(aws apprunner list-services --region ${{ env.AWS_REGION }} --query "ServiceSummaryList[?ServiceName=='${{ env.APP_RUNNER_SERVICE }}'].ServiceArn" --output text)
+          SERVICE_URL=$(aws apprunner describe-service --service-arn "$SERVICE_ARN" --region ${{ env.AWS_REGION }} --query "Service.ServiceUrl" --output text)
+          echo "url=$SERVICE_URL" >> $GITHUB_OUTPUT
+          echo "🚀 App deployed to: $SERVICE_URL"
+
