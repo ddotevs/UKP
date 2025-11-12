@@ -1,28 +1,40 @@
 import streamlit as st
-import sqlite3
-import hashlib
-from datetime import datetime, timedelta
-import pandas as pd
-from typing import List, Dict, Optional
-import json
-from urllib.parse import quote, unquote
+import sys
+import traceback
 
-# Page configuration - will be updated based on auth status
-# Try to use logo, fallback to emoji if not found
+# Wrap everything in error handling to catch initialization errors
 try:
-    st.set_page_config(
-        page_title="UKP Kickball Roster",
-        page_icon="static/images/logo.png",
-        layout="wide",
-        initial_sidebar_state="expanded"
-    )
-except:
-    st.set_page_config(
-        page_title="UKP Kickball Roster",
-        page_icon="⚾",
-        layout="wide",
-        initial_sidebar_state="expanded"
-    )
+    import sqlite3
+    import hashlib
+    from datetime import datetime, timedelta
+    import pandas as pd
+    from typing import List, Dict, Optional
+    import json
+    from urllib.parse import quote, unquote
+    
+    # Page configuration - will be updated based on auth status
+    # Try to use logo, fallback to emoji if not found
+    try:
+        st.set_page_config(
+            page_title="UKP Kickball Roster",
+            page_icon="static/images/logo.png",
+            layout="wide",
+            initial_sidebar_state="expanded"
+        )
+    except Exception as e:
+        # If logo fails, use emoji
+        st.set_page_config(
+            page_title="UKP Kickball Roster",
+            page_icon="⚾",
+            layout="wide",
+            initial_sidebar_state="expanded"
+        )
+except Exception as e:
+    # If imports fail, show error
+    st.set_page_config(page_title="Error", page_icon="❌")
+    st.error("Failed to import required modules")
+    st.code(traceback.format_exc())
+    st.stop()
 
 # Mobile responsiveness CSS
 st.markdown("""
@@ -283,8 +295,12 @@ try:
     init_db()
 except Exception as e:
     st.error(f"Database initialization error: {e}")
-    import traceback
     st.code(traceback.format_exc())
+    # Show more details
+    import os
+    st.write(f"Current directory: {os.getcwd()}")
+    st.write(f"/app exists: {os.path.exists('/app')}")
+    st.write(f"/app/data exists: {os.path.exists('/app/data')}")
     # Don't stop - allow the app to continue with a warning
     st.warning("App is running in limited mode. Some features may not work.")
 
