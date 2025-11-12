@@ -58,11 +58,13 @@ st.markdown("""
 
 # Database setup
 import os
-# Use /app/data directory if it exists (Docker), otherwise current directory
-if os.path.exists("/app/data"):
+# Use /app/data directory if we're in Docker, otherwise current directory
+if os.path.exists("/app"):
+    # We're in Docker, use /app/data
     os.makedirs("/app/data", exist_ok=True)
     DB_NAME = "/app/data/kickball_roster.db"
 else:
+    # Local development, use data directory
     os.makedirs("data", exist_ok=True)
     DB_NAME = "data/kickball_roster.db"
 
