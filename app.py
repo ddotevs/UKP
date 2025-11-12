@@ -24,83 +24,9 @@ except:
         initial_sidebar_state="expanded"
     )
 
-# Global CSS to override Streamlit's primary button color from red to green and add mobile responsiveness
+# Mobile responsiveness CSS
 st.markdown("""
     <style>
-    /* Override Streamlit's primary color CSS variable for all themes */
-    :root {
-        --primary-color: #28a745 !important;
-    }
-    /* Override for light theme */
-    [data-theme="light"] {
-        --primary-color: #28a745 !important;
-    }
-    /* Override for dark theme */
-    [data-theme="dark"] {
-        --primary-color: #28a745 !important;
-    }
-    /* Override Streamlit's internal theme variables */
-    [data-baseweb="theme"] {
-        --primary-color: #28a745 !important;
-    }
-    /* Override all primary button colors - replace red with green */
-    button[data-testid="baseButton-primary"],
-    button[data-testid="baseButton-primary"] *,
-    .stButton > button[data-testid="baseButton-primary"],
-    .stButton > button[data-testid="baseButton-primary"] * {
-        background-color: #28a745 !important;
-        background: #28a745 !important;
-        border-color: #28a745 !important;
-        color: white !important;
-    }
-    button[data-testid="baseButton-primary"]:hover,
-    button[data-testid="baseButton-primary"]:hover * {
-        background-color: #218838 !important;
-        background: #218838 !important;
-        border-color: #218838 !important;
-    }
-    /* Override emotion cache classes ONLY inside primary buttons */
-    button[data-testid="baseButton-primary"] [class*="st-emotion-cache"] {
-        background-color: #28a745 !important;
-        background: #28a745 !important;
-        border-color: #28a745 !important;
-        color: white !important;
-    }
-    button[data-testid="baseButton-primary"]:hover [class*="st-emotion-cache"] {
-        background-color: #218838 !important;
-        background: #218838 !important;
-        border-color: #218838 !important;
-    }
-    /* More aggressive selectors to catch all primary buttons - works in all themes */
-    button.kind-primary,
-    button[data-kind="primary"],
-    div[data-testid="stButton"] > button[data-testid="baseButton-primary"],
-    div[data-testid="stButton"] > button[data-testid="baseButton-primary"] *,
-    /* Target buttons in both light and dark themes */
-    [data-theme="light"] button[data-testid="baseButton-primary"],
-    [data-theme="dark"] button[data-testid="baseButton-primary"],
-    [data-baseweb="theme"] button[data-testid="baseButton-primary"] {
-        background-color: #28a745 !important;
-        background: #28a745 !important;
-        border-color: #28a745 !important;
-        color: white !important;
-    }
-    /* Force green on all elements inside primary buttons - all themes */
-    button[data-testid="baseButton-primary"] *,
-    button[data-testid="baseButton-primary"] * *,
-    [data-theme="light"] button[data-testid="baseButton-primary"] *,
-    [data-theme="dark"] button[data-testid="baseButton-primary"] * {
-        background-color: #28a745 !important;
-        color: white !important;
-    }
-    /* Hover states for all themes */
-    [data-theme="light"] button[data-testid="baseButton-primary"]:hover,
-    [data-theme="dark"] button[data-testid="baseButton-primary"]:hover {
-        background-color: #218838 !important;
-        background: #218838 !important;
-        border-color: #218838 !important;
-    }
-    
     /* Mobile responsiveness */
     @media (max-width: 768px) {
         /* Make columns stack on mobile */
@@ -128,82 +54,6 @@ st.markdown("""
         }
     }
     </style>
-    <script>
-    (function() {{
-        // Force green on all primary buttons - works for all themes
-        function forceGreenButtons() {{
-            // Find all primary buttons regardless of theme
-            const allButtons = document.querySelectorAll('button[data-testid="baseButton-primary"]');
-            allButtons.forEach(btn => {{
-                // Always force green - don't check current color
-                btn.style.setProperty('background-color', '#28a745', 'important');
-                btn.style.setProperty('background', '#28a745', 'important');
-                btn.style.setProperty('border-color', '#28a745', 'important');
-                btn.style.setProperty('color', 'white', 'important');
-                
-                // Force on all child elements
-                btn.querySelectorAll('*').forEach(el => {{
-                    el.style.setProperty('background-color', '#28a745', 'important');
-                    el.style.setProperty('color', 'white', 'important');
-                }});
-            }});
-        }}
-        
-        // Also listen for theme changes
-        const themeObserver = new MutationObserver(() => {{
-            forceGreenButtons();
-        }});
-        
-        // Watch for theme attribute changes
-        if (document.documentElement) {{
-            themeObserver.observe(document.documentElement, {{
-                attributes: true,
-                attributeFilter: ['data-theme', 'class']
-            }});
-        }}
-        
-        // Style Out in selectbox buttons
-        function styleOutOptions() {{
-            // Style Out in selectbox buttons
-            document.querySelectorAll('button[data-baseweb="select"]').forEach(btn => {{
-                const text = btn.textContent || btn.innerText || '';
-                if (text.trim() === 'Out') {{
-                    btn.style.setProperty('color', '#dc3545', 'important');
-                }}
-            }});
-            // Style Out in dropdown options
-            document.querySelectorAll('li[data-baseweb="option"]').forEach(li => {{
-                const text = li.textContent || li.innerText || '';
-                if (text.trim() === 'Out') {{
-                    li.style.setProperty('color', '#dc3545', 'important');
-                    const span = li.querySelector('span, div');
-                    if (span) {{
-                        span.style.setProperty('color', '#dc3545', 'important');
-                    }}
-                }}
-            }});
-        }}
-        
-        // Run both functions
-        forceGreenButtons();
-        styleOutOptions();
-        setTimeout(() => {{ forceGreenButtons(); styleOutOptions(); }}, 100);
-        setTimeout(() => {{ forceGreenButtons(); styleOutOptions(); }}, 500);
-        setTimeout(() => {{ forceGreenButtons(); styleOutOptions(); }}, 1000);
-        
-        // Use MutationObserver to catch dynamically added buttons and theme changes
-        const observer = new MutationObserver(() => {{
-            forceGreenButtons();
-            styleOutOptions();
-        }});
-        observer.observe(document.body, {{ childList: true, subtree: true, attributes: true, attributeFilter: ['data-theme', 'class'] }});
-        
-        // Also watch the root element for theme changes
-        if (document.documentElement) {{
-            observer.observe(document.documentElement, {{ attributes: true, attributeFilter: ['data-theme', 'class'] }});
-        }}
-    }})();
-    </script>
 """, unsafe_allow_html=True)
 
 # Database setup
