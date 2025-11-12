@@ -33,7 +33,9 @@ sudo chown $USER:$USER $APP_DIR
 
 # Copy application files (assuming you're running this from the project directory)
 echo "📋 Copying application files..."
-cp -r . $APP_DIR/
+# Get the directory where the script is located
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+cp -r $SCRIPT_DIR/* $APP_DIR/ 2>/dev/null || cp -r . $APP_DIR/
 cd $APP_DIR
 
 # Create virtual environment
