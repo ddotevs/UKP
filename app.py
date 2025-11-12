@@ -211,7 +211,8 @@ DB_NAME = "kickball_roster.db"
 
 def init_db():
     """Initialize the database with required tables"""
-    conn = sqlite3.connect(DB_NAME)
+    try:
+        conn = sqlite3.connect(DB_NAME, check_same_thread=False)
     c = conn.cursor()
     
     # Migrate: Remove UNIQUE constraint from lineup_positions if it exists
@@ -420,7 +421,11 @@ def get_next_thursday() -> datetime:
     return today + timedelta(days=days_until_thursday)
 
 # Initialize database
-init_db()
+try:
+    init_db()
+except Exception as e:
+    st.error(f"Database initialization error: {e}")
+    st.stop()
 
 # Initialize session state
 if 'authenticated' not in st.session_state:
