@@ -50,17 +50,26 @@ jobs:
           
           echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
 
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
       - name: Create or Update App Runner service
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
           IMAGE_URI: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
         run: |
+          set -e
+          
           # Get current service configuration
           SERVICE_ARN=$(aws apprunner list-services --region ${{ env.AWS_REGION }} --query "ServiceSummaryList[?ServiceName=='${{ env.APP_RUNNER_SERVICE }}'].ServiceArn" --output text)
           
           # Get IAM role for App Runner
           ROLE_ARN=$(aws iam get-role --role-name "AppRunnerECRAccessRole" --query "Role.Arn" --output text)
+          
+          echo "ECR Registry: $ECR_REGISTRY"
+          echo "Image URI: $IMAGE_URI"
+          echo "Role ARN: $ROLE_ARN"
           
           # Create service source configuration
           cat > /tmp/new-source-config.json <<EOF
@@ -84,7 +93,7 @@ jobs:
           }
           EOF
           
-          if [ -z "$SERVICE_ARN" ]; then
+          if [ -z "$SERVICE_ARN" ] || [ "$SERVICE_ARN" == "None" ]; then
             echo "Service not found. Creating new service..."
             # Create new service
             SERVICE_OUTPUT=$(aws apprunner create-service \
@@ -92,9 +101,18 @@ jobs:
               --source-configuration file:///tmp/new-source-config.json \
               --instance-configuration "Cpu=0.25 vCPU,Memory=0.5 GB" \
               --health-check-configuration Protocol=HTTP,Path=/_stcore/health,Interval=10,Timeout=5,HealthyThreshold=1,UnhealthyThreshold=5 \
-              --region ${{ env.AWS_REGION }})
+              --region ${{ env.AWS_REGION }} 2>&1) || {
+              echo "Error creating service:"
+              echo "$SERVICE_OUTPUT"
+              exit 1
+            }
             
-            SERVICE_ARN=$(echo "$SERVICE_OUTPUT" | jq -r '.Service.ServiceArn')
+            SERVICE_ARN=$(echo "$SERVICE_OUTPUT" | jq -r '.Service.ServiceArn // empty')
+            if [ -z "$SERVICE_ARN" ]; then
+              echo "Failed to extract service ARN from output:"
+              echo "$SERVICE_OUTPUT"
+              exit 1
+            fi
             echo "✅ Service created: $SERVICE_ARN"
           else
             echo "Service exists. Updating service..."
@@ -102,7 +120,10 @@ jobs:
             aws apprunner update-service \
               --service-arn "$SERVICE_ARN" \
               --source-configuration file:///tmp/new-source-config.json \
-              --region ${{ env.AWS_REGION }}
+              --region ${{ env.AWS_REGION }} || {
+              echo "Error updating service"
+              exit 1
+            }
             
             echo "✅ Service updated. Deployment will start automatically."
           fi
