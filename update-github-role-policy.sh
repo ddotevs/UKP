@@ -44,12 +44,7 @@ cat > /tmp/github-actions-policy-updated.json <<EOF
     {
       "Effect": "Allow",
       "Action": "iam:PassRole",
-      "Resource": "arn:aws:iam::$ACCOUNT_ID:role/AppRunnerECRAccessRole",
-      "Condition": {
-        "StringEquals": {
-          "iam:PassedToService": "apprunner.amazonaws.com"
-        }
-      }
+      "Resource": "arn:aws:iam::$ACCOUNT_ID:role/AppRunnerECRAccessRole"
     }
   ]
 }
