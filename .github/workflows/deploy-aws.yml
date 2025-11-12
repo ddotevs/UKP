@@ -50,7 +50,7 @@ jobs:
           
           echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
 
-      - name: Update App Runner service
+      - name: Create or Update App Runner service
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
@@ -59,15 +59,10 @@ jobs:
           # Get current service configuration
           SERVICE_ARN=$(aws apprunner list-services --region ${{ env.AWS_REGION }} --query "ServiceSummaryList[?ServiceName=='${{ env.APP_RUNNER_SERVICE }}'].ServiceArn" --output text)
           
-          if [ -z "$SERVICE_ARN" ]; then
-            echo "Service not found. Please run setup-aws.sh first to create the App Runner service."
-            exit 1
-          fi
+          # Get IAM role for App Runner
+          ROLE_ARN=$(aws iam get-role --role-name "AppRunnerECRAccessRole" --query "Role.Arn" --output text)
           
-          # Get current service config
-          aws apprunner describe-service --service-arn "$SERVICE_ARN" --region ${{ env.AWS_REGION }} > /tmp/service-config.json
-          
-          # Update service source configuration with new image
+          # Create service source configuration
           cat > /tmp/new-source-config.json <<EOF
           {
             "ImageRepository": {
@@ -82,25 +77,45 @@ jobs:
               },
               "ImageRepositoryType": "ECR"
             },
-            "AutoDeploymentsEnabled": false
+            "AutoDeploymentsEnabled": false,
+            "AuthenticationConfiguration": {
+              "AccessRoleArn": "$ROLE_ARN"
+            }
           }
           EOF
           
-          # Update and deploy
-          aws apprunner update-service \
-            --service-arn "$SERVICE_ARN" \
-            --source-configuration file:///tmp/new-source-config.json \
-            --region ${{ env.AWS_REGION }}
+          if [ -z "$SERVICE_ARN" ]; then
+            echo "Service not found. Creating new service..."
+            # Create new service
+            SERVICE_OUTPUT=$(aws apprunner create-service \
+              --service-name "${{ env.APP_RUNNER_SERVICE }}" \
+              --source-configuration file:///tmp/new-source-config.json \
+              --instance-configuration "Cpu=0.25 vCPU,Memory=0.5 GB" \
+              --health-check-configuration Protocol=HTTP,Path=/_stcore/health,Interval=10,Timeout=5,HealthyThreshold=1,UnhealthyThreshold=5 \
+              --region ${{ env.AWS_REGION }})
+            
+            SERVICE_ARN=$(echo "$SERVICE_OUTPUT" | jq -r '.Service.ServiceArn')
+            echo "✅ Service created: $SERVICE_ARN"
+          else
+            echo "Service exists. Updating service..."
+            # Update existing service
+            aws apprunner update-service \
+              --service-arn "$SERVICE_ARN" \
+              --source-configuration file:///tmp/new-source-config.json \
+              --region ${{ env.AWS_REGION }}
+            
+            echo "✅ Service updated. Deployment will start automatically."
+          fi
           
-          echo "✅ Service updated. Deployment will start automatically."
+          echo "SERVICE_ARN=$SERVICE_ARN" >> $GITHUB_ENV
 
       - name: Get App Runner service URL
         id: get-url
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         run: |
-          SERVICE_ARN=$(aws apprunner list-services --region ${{ env.AWS_REGION }} --query "ServiceSummaryList[?ServiceName=='${{ env.APP_RUNNER_SERVICE }}'].ServiceArn" --output text)
           SERVICE_URL=$(aws apprunner describe-service --service-arn "$SERVICE_ARN" --region ${{ env.AWS_REGION }} --query "Service.ServiceUrl" --output text)
           echo "url=$SERVICE_URL" >> $GITHUB_OUTPUT
-          echo "🚀 App deployed to: $SERVICE_URL"
+          echo "🚀 App deployed to: https://$SERVICE_URL"
+          echo ""
+          echo "⏳ Service is being deployed. This may take a few minutes."
+          echo "   Check status: aws apprunner describe-service --service-arn $SERVICE_ARN --region ${{ env.AWS_REGION }}"
 
