@@ -28,6 +28,10 @@ wheels/
 *.sqlite
 *.sqlite3
 
+# SSH Keys
+*.pem
+*.key
+
 # Streamlit
 .streamlit/
 
