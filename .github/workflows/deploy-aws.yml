@@ -10,6 +10,8 @@ env:
   AWS_REGION: us-east-1  # Change to your preferred region
   ECR_REPOSITORY: ukp-app
   APP_RUNNER_SERVICE: ukp-service
+  # AppRunnerECRAccessRole ARN - should be set as GitHub secret: AWS_APP_RUNNER_ROLE_ARN
+  # Format: arn:aws:iam::ACCOUNT_ID:role/AppRunnerECRAccessRole
 
 jobs:
   deploy:
@@ -65,8 +67,15 @@ jobs:
           # Get current service configuration
           SERVICE_ARN=$(aws apprunner list-services --region ${{ env.AWS_REGION }} --query "ServiceSummaryList[?ServiceName=='${{ env.APP_RUNNER_SERVICE }}'].ServiceArn" --output text)
           
-          # Get IAM role for App Runner
-          ROLE_ARN=$(aws iam get-role --role-name "AppRunnerECRAccessRole" --query "Role.Arn" --output text)
+          # Get IAM role ARN from GitHub secret (avoids needing iam:GetRole permission)
+          ROLE_ARN="${{ secrets.AWS_APP_RUNNER_ROLE_ARN }}"
+          
+          if [ -z "$ROLE_ARN" ]; then
+            echo "Error: AWS_APP_RUNNER_ROLE_ARN secret is not set"
+            echo "Please set it in GitHub Secrets with the AppRunnerECRAccessRole ARN"
+            echo "Format: arn:aws:iam::ACCOUNT_ID:role/AppRunnerECRAccessRole"
+            exit 1
+          fi
           
           echo "ECR Registry: $ECR_REGISTRY"
           echo "Image URI: $IMAGE_URI"
