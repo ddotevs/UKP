@@ -40,6 +40,16 @@ cat > /tmp/github-actions-policy-updated.json <<EOF
         "apprunner:UpdateService"
       ],
       "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": "arn:aws:iam::$ACCOUNT_ID:role/AppRunnerECRAccessRole",
+      "Condition": {
+        "StringEquals": {
+          "iam:PassedToService": "apprunner.amazonaws.com"
+        }
+      }
     }
   ]
 }
@@ -53,10 +63,10 @@ aws iam put-role-policy \
 
 echo "✅ Policy updated successfully!"
 echo ""
-echo "The role now has the following ECR permissions:"
-echo "  - ecr:DescribeImages (NEW)"
-echo "  - ecr:DescribeRepositories (NEW)"
-echo "  - All existing ECR permissions"
+echo "The role now has the following permissions:"
+echo "  - ECR: DescribeImages, DescribeRepositories, and all push/pull permissions"
+echo "  - App Runner: CreateService, UpdateService, and all management permissions"
+echo "  - IAM: PassRole (for AppRunnerECRAccessRole to App Runner service)"
 echo ""
 echo "You can now retry the GitHub Actions workflow."
 

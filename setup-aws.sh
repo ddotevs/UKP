@@ -243,9 +243,21 @@ EOF
       "Action": [
         "apprunner:ListServices",
         "apprunner:DescribeService",
-        "apprunner:StartDeployment"
+        "apprunner:StartDeployment",
+        "apprunner:CreateService",
+        "apprunner:UpdateService"
       ],
       "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": "arn:aws:iam::$ACCOUNT_ID:role/AppRunnerECRAccessRole",
+      "Condition": {
+        "StringEquals": {
+          "iam:PassedToService": "apprunner.amazonaws.com"
+        }
+      }
     }
   ]
 }
