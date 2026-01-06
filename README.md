@@ -1,138 +1,147 @@
 # UKP Kickball Roster Manager
 
-A Streamlit web application for managing kickball team rosters, lineups, and game planning.
+A web application for managing kickball team rosters, lineups, and game planning. Built with Flask (Python) backend and vanilla HTML/CSS/JavaScript frontend.
 
 ## Features
 
-- **Main Roster Management**: Add and manage your core team roster
+- **Main Roster Management**: Add and manage your core team roster with gender tracking
 - **Substitute Players**: Manage substitute players that can be added on a game-by-game basis
 - **Game Lineup Setup**: 
-  - 7 innings with 11 positions + "Out" position
-  - Drag-and-drop style interface for setting lineups
+  - 7 innings with 11 field positions + "Out" position
+  - Spreadsheet-style interface for setting lineups
   - Player status management (IN/OUT for each game)
-- **Statistics Tracking**:
-  - Count of innings with unused positions
+  - Kicking order management with up/down controls
+- **Validation & Warnings**:
+  - Female player count per inning (requires 4)
+  - Duplicate position detection
+  - Unused position tracking
   - Player sit-out counts per game
 - **Game Details**:
   - Date picker (defaults to next Thursday)
   - Editable team name (default: "Unsolicited Kick Pics")
   - Editable opponent name
 - **Authentication**: 
-  - Public viewing of lineups
+  - Public viewing of lineups (read-only)
   - Login required for editing
+- **Modern UI**:
+  - Dark theme with sports aesthetic
+  - Mobile responsive design
+  - Smooth animations
 
-## Installation
+## Quick Start
 
-1. Clone this repository:
-```bash
-git clone <repository-url>
-cd UKP
-```
+### Local Development
 
-2. Install dependencies:
+1. Install dependencies:
 ```bash
 pip install -r requirements.txt
 ```
 
-3. Run the application:
+2. Run the application:
 ```bash
-streamlit run app.py
+python app.py
 ```
 
-## Usage
+3. Open http://localhost:8080 in your browser
 
-### First Time Setup
+### Docker
 
-1. When you first run the app, create a user account in the sidebar
-2. Login with your credentials
-3. Add players to your main roster in the "Main Roster" tab
-4. Optionally add substitute players in the "Substitutes" tab
+Build and run with Docker:
 
-### Setting Up a Game
+```bash
+docker build -t ukp-kickball .
+docker run -p 8080:8080 -v $(pwd)/data:/app/data ukp-kickball
+```
+
+Or use Docker Compose:
+
+```bash
+docker-compose up -d
+```
+
+## First Time Setup
+
+1. Open the application in your browser
+2. Click "Login" and create the first user account
+3. Login with your credentials
+4. Add players to your main roster in the "Roster" tab
+5. Optionally add substitute players
+
+## Setting Up a Game
 
 1. Go to the "Game Lineup" tab
 2. Adjust the game date, team name, and opponent name as needed
-3. Move players from main roster to IN (available) or OUT (not available)
-4. Add substitute players to the game if needed
-5. Set the lineup for each of the 7 innings by selecting players for each position
-6. The app will highlight players who are available but not yet in the lineup
+3. Toggle players IN (green) or OUT (gray) for the game
+4. Expand "Substitutes" to add substitutes to the game
+5. Use the spreadsheet view to set positions for each inning
+6. Use ↑↓ buttons to reorder the kicking lineup
+7. Click "Copy Inning 1 to All" to quickly fill all innings
 
-### Viewing Lineups
+## Viewing Lineups
 
 - Use the "View Lineup" tab to see lineups for any game
-- View statistics including player sit-out counts and incomplete innings
+- This view is accessible without login (read-only)
+- Select different games from the dropdown
 
 ## Positions
 
 Each inning has 12 positions:
-- Pitcher
-- Catcher
-- First Base
-- Second Base
-- Third Base
-- Short Stop
-- Left Field
-- Left Center
-- Center Field
-- Right Center
-- Right Field
-- Out (for players sitting the inning)
+- **P** - Pitcher
+- **C** - Catcher
+- **1st** - First Base
+- **2nd** - Second Base
+- **3rd** - Third Base
+- **SS** - Short Stop
+- **LF** - Left Field
+- **LC** - Left Center
+- **CF** - Center Field
+- **RC** - Right Center
+- **RF** - Right Field
+- **Out** - Sitting out the inning
 
-## Database
+## Tech Stack
 
-The app uses SQLite for data storage. The database file (`kickball_roster.db`) is created automatically on first run.
+- **Backend**: Flask (Python)
+- **Frontend**: Vanilla HTML/CSS/JavaScript
+- **Database**: SQLite
+- **Production Server**: Gunicorn
 
-## Deployment to AWS
+## Project Structure
 
-This app can be deployed to AWS using various methods:
-
-### Option 1: AWS App Runner
-1. Create a Dockerfile (see below)
-2. Push to a container registry (ECR)
-3. Deploy via AWS App Runner
-
-### Option 2: EC2 with Streamlit
-1. Launch an EC2 instance
-2. Install dependencies
-3. Run Streamlit with public access
-4. Configure security groups appropriately
-
-### Option 3: ECS/Fargate
-1. Containerize the application
-2. Deploy to ECS or Fargate
-3. Use Application Load Balancer for public access
-
-## Dockerfile Example
-
-```dockerfile
-FROM python:3.11-slim
-
-WORKDIR /app
-
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-COPY app.py .
-
-EXPOSE 8501
-
-HEALTHCHECK CMD curl --fail http://localhost:8501/_stcore/health
-
-ENTRYPOINT ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0"]
 ```
+UKP/
+├── app.py              # Flask backend API
+├── requirements.txt    # Python dependencies
+├── Dockerfile         # Container configuration
+├── docker-compose.yml # Docker Compose config
+├── static/
+│   ├── index.html     # Main HTML page
+│   ├── css/
+│   │   └── style.css  # Styles
+│   ├── js/
+│   │   └── app.js     # Frontend JavaScript
+│   └── images/
+│       └── logo.png   # Team logo
+└── data/
+    └── kickball_roster.db  # SQLite database (created automatically)
+```
+
+## Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `SECRET_KEY` | Flask session secret key | `ukp-kickball-secret-key-change-in-production` |
+| `PORT` | Server port | `8080` |
+| `FLASK_DEBUG` | Enable debug mode | `false` |
 
 ## Security Notes
 
 - Passwords are hashed using SHA256
 - Only the first user can be created through the UI
-- For production, consider:
-  - Using stronger password hashing (bcrypt)
-  - Implementing proper session management
-  - Using environment variables for sensitive data
-  - Setting up HTTPS
-  - Using a more robust database (PostgreSQL)
+- For production, set a strong `SECRET_KEY` environment variable
+- Consider using HTTPS (via reverse proxy like nginx)
+- The SQLite database is stored in `/app/data` (Docker) or `./data` (local)
 
 ## License
 
 MIT License
-

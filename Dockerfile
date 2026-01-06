@@ -4,7 +4,6 @@ WORKDIR /app
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
-    gcc \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
@@ -13,20 +12,18 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application files
-COPY . .
-
-# Ensure .streamlit config directory exists
-RUN mkdir -p .streamlit
+COPY app.py .
+COPY static/ ./static/
 
 # Create directory for database
 RUN mkdir -p /app/data
 
-# Expose Streamlit port
-EXPOSE 8501
+# Expose Flask port
+EXPOSE 8080
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl --fail http://localhost:8501/_stcore/health || exit 1
+    CMD curl --fail http://localhost:8080/api/auth/status || exit 1
 
-# Run Streamlit with proper settings for App Runner
-CMD ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0", "--server.headless=true", "--server.enableCORS=true", "--server.enableXsrfProtection=false", "--server.allowRunOnSave=false", "--browser.gatherUsageStats=false"]
+# Run with Gunicorn for production
+CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "2", "--threads", "4", "app:app"]

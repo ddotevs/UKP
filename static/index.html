@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UKP Kickball Roster</title>
+    <link rel="icon" type="image/png" href="/static/images/logo.png">
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="header-content">
+                <div class="logo-title">
+                    <img src="/static/images/logo.png" alt="UKP Logo" class="logo">
+                    <h1>UKP Kickball</h1>
+                </div>
+                <div class="auth-section" id="authSection">
+                    <!-- Auth buttons injected by JS -->
+                </div>
+            </div>
+        </header>
+
+        <!-- Navigation Tabs -->
+        <nav class="tab-nav" id="tabNav">
+            <!-- Tabs injected by JS -->
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- View Mode Banner (for non-authenticated) -->
+            <div class="view-banner" id="viewBanner" style="display: none;">
+                <span class="view-icon">👀</span>
+                <span>View Mode: You are viewing in read-only mode. Please login to edit.</span>
+            </div>
+
+            <!-- Tab Panels -->
+            <div id="gameLineupPanel" class="tab-panel">
+                <!-- Game Lineup Content -->
+            </div>
+
+            <div id="rosterPanel" class="tab-panel" style="display: none;">
+                <!-- Roster Management Content -->
+            </div>
+
+            <div id="viewLineupPanel" class="tab-panel" style="display: none;">
+                <!-- View Lineup Content -->
+            </div>
+        </main>
+
+        <!-- Login Modal -->
+        <div class="modal-overlay" id="loginModal" style="display: none;">
+            <div class="modal">
+                <div class="modal-header">
+                    <h2>Login</h2>
+                    <button class="modal-close" onclick="closeModal('loginModal')">&times;</button>
+                </div>
+                <form id="loginForm" class="modal-form">
+                    <div class="form-group">
+                        <label for="loginUsername">Username</label>
+                        <input type="text" id="loginUsername" required autocomplete="username">
+                    </div>
+                    <div class="form-group">
+                        <label for="loginPassword">Password</label>
+                        <input type="password" id="loginPassword" required autocomplete="current-password">
+                    </div>
+                    <div class="form-error" id="loginError"></div>
+                    <button type="submit" class="btn btn-primary btn-full">Login</button>
+                </form>
+                <div id="registerSection" style="display: none;">
+                    <div class="divider"><span>or</span></div>
+                    <h3>Create First User</h3>
+                    <form id="registerForm" class="modal-form">
+                        <div class="form-group">
+                            <label for="regUsername">Username</label>
+                            <input type="text" id="regUsername" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="regPassword">Password</label>
+                            <input type="password" id="regPassword" required>
+                        </div>
+                        <div class="form-error" id="registerError"></div>
+                        <button type="submit" class="btn btn-secondary btn-full">Create User</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
+
