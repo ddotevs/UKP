@@ -561,10 +561,19 @@ async function togglePlayerStatus(playerName) {
 }
 
 function updateLineupTable() {
+    // Save scroll position before re-render
+    const scrollY = window.scrollY;
     const tableWrapper = document.querySelector('.lineup-table-wrapper');
+    const wrapperScrollLeft = tableWrapper ? tableWrapper.scrollLeft : 0;
+    
     if (tableWrapper) {
         tableWrapper.innerHTML = buildLineupTable();
+        // Restore horizontal scroll position for the table
+        tableWrapper.scrollLeft = wrapperScrollLeft;
     }
+    
+    // Restore page scroll position
+    window.scrollTo(0, scrollY);
 }
 
 async function updateGameDetails() {
@@ -783,9 +792,14 @@ async function loadRoster() {
     }
 }
 
-// Refresh roster data without showing loading spinner (prevents flash/refresh feel)
+// Refresh roster data without showing loading spinner and preserve scroll position
 async function refreshRosterData() {
     if (!state.authenticated) return;
+    
+    // Save scroll position before re-render
+    const scrollY = window.scrollY;
+    const panel = document.getElementById('rosterPanel');
+    const panelScrollTop = panel ? panel.scrollTop : 0;
     
     try {
         const roster = await api('/api/roster');
@@ -793,6 +807,10 @@ async function refreshRosterData() {
         const users = await api('/api/auth/users');
         
         renderRoster(roster, substitutes, users);
+        
+        // Restore scroll position after re-render
+        window.scrollTo(0, scrollY);
+        if (panel) panel.scrollTop = panelScrollTop;
     } catch (error) {
         console.error('Failed to refresh roster:', error);
     }
