@@ -151,6 +151,49 @@ UKP/
 - Consider using HTTPS (via reverse proxy like nginx)
 - The SQLite database is stored in `/app/data` (Docker) or `./data` (local)
 
+## File Cleanup Guide
+
+This project was migrated from Streamlit to Flask. The following files are **legacy/unused** and can be safely deleted:
+
+### Files to DELETE (not needed)
+
+| File | Reason |
+|------|--------|
+| `.streamlit/config.toml` | Streamlit configuration - not used with Flask |
+| `deploy.sh` | Old Streamlit deployment script |
+| `DEPLOYMENT.md` | Outdated Streamlit deployment guide |
+| `AWS_DEPLOYMENT.md` | AWS guide for Streamlit |
+| `EC2_QUICK_START.md` | EC2 guide for Streamlit |
+| `SETUP_QUICK.md` | Outdated setup guide |
+| `launch-ec2.sh` | EC2 launch script (Streamlit) |
+| `setup-aws.sh` | AWS setup script (Streamlit) |
+| `.github/workflows/deploy-aws.yml` | GitHub Actions configured for Streamlit |
+
+### Files to KEEP (required)
+
+| File | Purpose |
+|------|---------|
+| `app.py` | Flask backend API |
+| `static/index.html` | Main HTML page |
+| `static/css/style.css` | Styles |
+| `static/js/app.js` | Frontend JavaScript |
+| `static/images/logo.png` | Team logo |
+| `Dockerfile` | Docker container build |
+| `docker-compose.yml` | Docker Compose config |
+| `requirements.txt` | Python dependencies |
+| `README.md` | This documentation |
+| `.gitignore` | Git ignore rules |
+| `.dockerignore` | Docker ignore rules |
+
+### Folders
+
+| Folder | Status |
+|--------|--------|
+| `data/` | Auto-created, contains database - should be in `.gitignore` |
+| `static/` | Required - frontend assets |
+| `.streamlit/` | Can delete entire folder |
+| `.github/` | Can delete if not using AWS deployment |
+
 ## License
 
 MIT License
