@@ -627,7 +627,15 @@ async function movePlayer(player, direction) {
             body: JSON.stringify({ direction })
         });
         
-        await loadGameLineup();
+        // Reload just the lineup data (not the entire page)
+        const lineupData = await api(`/api/games/${state.currentGame.id}/lineup`);
+        state.availablePlayers = lineupData.availablePlayers;
+        state.genders = lineupData.genders;
+        state.lineup = lineupData.lineup;
+        state.sitOutCounts = lineupData.sitOutCounts;
+        
+        // Re-render just the lineup table
+        updateLineupTable();
     } catch (error) {
         console.error('Failed to move player:', error);
     }
@@ -772,6 +780,21 @@ async function loadRoster() {
     } catch (error) {
         console.error('Failed to load roster:', error);
         panel.innerHTML = `<div class="empty-state"><div class="empty-state-icon">⚠️</div><p>Failed to load roster</p></div>`;
+    }
+}
+
+// Refresh roster data without showing loading spinner (prevents flash/refresh feel)
+async function refreshRosterData() {
+    if (!state.authenticated) return;
+    
+    try {
+        const roster = await api('/api/roster');
+        const substitutes = await api('/api/substitutes');
+        const users = await api('/api/auth/users');
+        
+        renderRoster(roster, substitutes, users);
+    } catch (error) {
+        console.error('Failed to refresh roster:', error);
     }
 }
 
@@ -926,7 +949,8 @@ async function addPlayer(event) {
         nameInput.value = '';
         document.getElementById('newPlayerFemale').checked = false;
         
-        await loadRoster();
+        // Reload data without showing loading spinner (no flash)
+        await refreshRosterData();
         
         // Auto-focus back to name input for quick entry
         setTimeout(() => {
@@ -943,7 +967,7 @@ async function deleteRosterPlayer(name) {
     
     try {
         await api(`/api/roster/${encodeURIComponent(name)}`, { method: 'DELETE' });
-        await loadRoster();
+        await refreshRosterData();
     } catch (error) {
         alert(error.message);
     }
@@ -952,7 +976,7 @@ async function deleteRosterPlayer(name) {
 async function toggleRosterGender(name) {
     try {
         await api(`/api/roster/${encodeURIComponent(name)}/gender`, { method: 'PUT' });
-        await loadRoster();
+        await refreshRosterData();
     } catch (error) {
         alert(error.message);
     }
@@ -976,7 +1000,8 @@ async function addSubstitute(event) {
         nameInput.value = '';
         document.getElementById('newSubFemale').checked = false;
         
-        await loadRoster();
+        // Reload data without showing loading spinner (no flash)
+        await refreshRosterData();
         
         // Auto-focus back to name input for quick entry
         setTimeout(() => {
@@ -993,7 +1018,7 @@ async function deleteSubstitute(name) {
     
     try {
         await api(`/api/substitutes/${encodeURIComponent(name)}`, { method: 'DELETE' });
-        await loadRoster();
+        await refreshRosterData();
     } catch (error) {
         alert(error.message);
     }
@@ -1002,7 +1027,7 @@ async function deleteSubstitute(name) {
 async function toggleSubGender(name) {
     try {
         await api(`/api/substitutes/${encodeURIComponent(name)}/gender`, { method: 'PUT' });
-        await loadRoster();
+        await refreshRosterData();
     } catch (error) {
         alert(error.message);
     }
@@ -1027,7 +1052,7 @@ async function addUser(event) {
         usernameInput.value = '';
         passwordInput.value = '';
         
-        await loadRoster();
+        await refreshRosterData();
     } catch (error) {
         alert(error.message);
     }
@@ -1038,7 +1063,7 @@ async function deleteUser(userId, username) {
     
     try {
         await api(`/api/auth/users/${userId}`, { method: 'DELETE' });
-        await loadRoster();
+        await refreshRosterData();
     } catch (error) {
         alert(error.message);
     }
