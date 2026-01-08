@@ -389,6 +389,20 @@ h4 { font-size: 1.25rem; }
     border-bottom: 1px solid var(--border-color);
 }
 
+.game-selector-header {
+    display: flex;
+    align-items: flex-end;
+    gap: var(--space-md);
+}
+
+.game-selector-header .form-group {
+    flex: 1;
+}
+
+.game-selector-header .btn {
+    white-space: nowrap;
+}
+
 .card-title {
     color: var(--text-primary);
     font-size: 1.25rem;

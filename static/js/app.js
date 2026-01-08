@@ -221,15 +221,23 @@ async function loadGameLineup() {
     panel.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
     
     try {
+        // Load all games for the selector
+        state.allGames = await api('/api/games');
+        
         // Load current game (no longer auto-creates)
         const gameResponse = await api('/api/games/current');
         
-        // Check if a game exists
+        // Check if a game exists for this week
         if (!gameResponse.exists) {
-            // No game for this week - show create game UI
             state.currentGame = null;
             state.nextThursday = gameResponse.next_thursday;
-            renderNoGameUI();
+            
+            // If there are other games, load the first one; otherwise show create UI
+            if (state.allGames.length > 0) {
+                await loadGameById(state.allGames[0].id);
+            } else {
+                renderNoGameUI();
+            }
             return;
         }
         
@@ -257,35 +265,71 @@ async function loadGameLineup() {
     }
 }
 
+function switchGame(gameId) {
+    loadGameById(parseInt(gameId));
+}
+
+function showCreateGameForm() {
+    // Get next Thursday as default date
+    const today = new Date();
+    const dayOfWeek = today.getDay();
+    const daysUntilThursday = (4 - dayOfWeek + 7) % 7 || 7;
+    const nextThursday = new Date(today);
+    nextThursday.setDate(today.getDate() + daysUntilThursday);
+    const defaultDate = nextThursday.toISOString().split('T')[0];
+    
+    state.nextThursday = defaultDate;
+    renderNoGameUI();
+}
+
 function renderNoGameUI() {
     const panel = document.getElementById('gameLineupPanel');
     
-    panel.innerHTML = `
+    // Build existing games selector if there are games
+    const existingGamesHtml = (state.allGames && state.allGames.length > 0) ? `
         <div class="card">
-            <div class="empty-state">
-                <div class="empty-state-icon">📅</div>
-                <h3>No Game Scheduled</h3>
-                <p>No game exists for ${state.nextThursday}</p>
-                <form class="create-game-form" onsubmit="createNewGame(event)">
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="newGameDate">Game Date</label>
-                            <input type="date" id="newGameDate" class="form-input" value="${state.nextThursday}" required>
-                        </div>
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="newTeamName">Team Name</label>
-                            <input type="text" id="newTeamName" class="form-input" placeholder="Your team name">
-                        </div>
-                        <div class="form-group">
-                            <label for="newOpponentName">Opponent</label>
-                            <input type="text" id="newOpponentName" class="form-input" placeholder="Opponent name">
-                        </div>
-                    </div>
-                    <button type="submit" class="btn btn-primary">Create Game</button>
-                </form>
+            <div class="card-header">
+                <h3 class="card-title">Existing Games</h3>
             </div>
+            <div class="form-group">
+                <label>Switch to an existing game</label>
+                <select class="form-select" onchange="if(this.value) switchGame(this.value)">
+                    <option value="">Select a game...</option>
+                    ${state.allGames.map(g => {
+                        const publishIndicator = g.is_published ? '✓' : '○';
+                        return `<option value="${g.id}">${publishIndicator} ${g.game_date} - ${g.team_name || 'Unnamed'} vs ${g.opponent_name || 'TBD'}</option>`;
+                    }).join('')}
+                </select>
+            </div>
+        </div>
+    ` : '';
+    
+    panel.innerHTML = `
+        ${existingGamesHtml}
+        
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Create New Game</h3>
+            </div>
+            <form class="create-game-form" onsubmit="createNewGame(event)" style="padding: 0 var(--space-lg) var(--space-lg);">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="newGameDate">Game Date</label>
+                        <input type="date" id="newGameDate" class="form-input" value="${state.nextThursday}" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="newTeamName">Team Name</label>
+                        <input type="text" id="newTeamName" class="form-input" placeholder="Your team name">
+                    </div>
+                    <div class="form-group">
+                        <label for="newOpponentName">Opponent</label>
+                        <input type="text" id="newOpponentName" class="form-input" placeholder="Opponent name">
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary">Create Game</button>
+            </form>
         </div>
     `;
 }
@@ -307,10 +351,45 @@ async function createNewGame(event) {
             })
         });
         
-        state.currentGame = game;
-        await loadGameLineup();
+        // Load the specific game we just created
+        await loadGameById(game.id);
     } catch (error) {
         alert('Failed to create game: ' + error.message);
+    }
+}
+
+async function loadGameById(gameId) {
+    if (!state.authenticated) return;
+    
+    const panel = document.getElementById('gameLineupPanel');
+    panel.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    
+    try {
+        // Refresh all games list
+        state.allGames = await api('/api/games');
+        
+        // Load specific game
+        state.currentGame = await api(`/api/games/${gameId}`);
+        
+        // Load game status (players and their IN/OUT status)
+        const statusData = await api(`/api/games/${state.currentGame.id}/status`);
+        state.mainRoster = statusData.mainRoster;
+        state.substitutes = statusData.substitutes;
+        state.playerStatuses = statusData.statuses;
+        
+        // Load lineup
+        const lineupData = await api(`/api/games/${state.currentGame.id}/lineup`);
+        state.availablePlayers = lineupData.availablePlayers;
+        state.genders = lineupData.genders;
+        state.lineup = lineupData.lineup;
+        state.sitOutCounts = lineupData.sitOutCounts;
+        state.positions = lineupData.positions;
+        state.abbreviations = lineupData.abbreviations;
+        
+        renderGameLineup();
+    } catch (error) {
+        console.error('Failed to load game:', error);
+        panel.innerHTML = `<div class="empty-state"><div class="empty-state-icon">⚠️</div><p>Failed to load game</p></div>`;
     }
 }
 
@@ -371,7 +450,26 @@ function renderGameLineup() {
              Publish Lineup
            </button>`;
     
+    // Build game selector
+    const gameSelectorOptions = (state.allGames || []).map(g => {
+        const publishIndicator = g.is_published ? '✓' : '○';
+        const displayName = `${publishIndicator} ${g.game_date} - ${g.team_name || 'Unnamed'} vs ${g.opponent_name || 'TBD'}`;
+        return `<option value="${g.id}" ${g.id === state.currentGame.id ? 'selected' : ''}>${displayName}</option>`;
+    }).join('');
+    
     panel.innerHTML = `
+        <div class="card">
+            <div class="game-selector-header">
+                <div class="form-group" style="margin-bottom: 0; flex: 1;">
+                    <label>Select Game</label>
+                    <select class="form-select" onchange="switchGame(this.value)">
+                        ${gameSelectorOptions}
+                    </select>
+                </div>
+                <button class="btn btn-primary" onclick="showCreateGameForm()">+ New Game</button>
+            </div>
+        </div>
+        
         <div class="card publish-card">
             <div class="publish-section">
                 ${publishStatusHtml}
