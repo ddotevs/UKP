@@ -221,8 +221,19 @@ async function loadGameLineup() {
     panel.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
     
     try {
-        // Load current game
-        state.currentGame = await api('/api/games/current');
+        // Load current game (no longer auto-creates)
+        const gameResponse = await api('/api/games/current');
+        
+        // Check if a game exists
+        if (!gameResponse.exists) {
+            // No game for this week - show create game UI
+            state.currentGame = null;
+            state.nextThursday = gameResponse.next_thursday;
+            renderNoGameUI();
+            return;
+        }
+        
+        state.currentGame = gameResponse;
         
         // Load game status (players and their IN/OUT status)
         const statusData = await api(`/api/games/${state.currentGame.id}/status`);
@@ -243,6 +254,63 @@ async function loadGameLineup() {
     } catch (error) {
         console.error('Failed to load game lineup:', error);
         panel.innerHTML = `<div class="empty-state"><div class="empty-state-icon">⚠️</div><p>Failed to load game lineup</p></div>`;
+    }
+}
+
+function renderNoGameUI() {
+    const panel = document.getElementById('gameLineupPanel');
+    
+    panel.innerHTML = `
+        <div class="card">
+            <div class="empty-state">
+                <div class="empty-state-icon">📅</div>
+                <h3>No Game Scheduled</h3>
+                <p>No game exists for ${state.nextThursday}</p>
+                <form class="create-game-form" onsubmit="createNewGame(event)">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="newGameDate">Game Date</label>
+                            <input type="date" id="newGameDate" class="form-input" value="${state.nextThursday}" required>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="newTeamName">Team Name</label>
+                            <input type="text" id="newTeamName" class="form-input" placeholder="Your team name">
+                        </div>
+                        <div class="form-group">
+                            <label for="newOpponentName">Opponent</label>
+                            <input type="text" id="newOpponentName" class="form-input" placeholder="Opponent name">
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Create Game</button>
+                </form>
+            </div>
+        </div>
+    `;
+}
+
+async function createNewGame(event) {
+    event.preventDefault();
+    
+    const gameDate = document.getElementById('newGameDate').value;
+    const teamName = document.getElementById('newTeamName').value.trim();
+    const opponentName = document.getElementById('newOpponentName').value.trim();
+    
+    try {
+        const game = await api('/api/games', {
+            method: 'POST',
+            body: JSON.stringify({
+                game_date: gameDate,
+                team_name: teamName,
+                opponent_name: opponentName
+            })
+        });
+        
+        state.currentGame = game;
+        await loadGameLineup();
+    } catch (error) {
+        alert('Failed to create game: ' + error.message);
     }
 }
 
@@ -316,6 +384,7 @@ function renderGameLineup() {
         <div class="card">
             <div class="card-header">
                 <h3 class="card-title">Game Details</h3>
+                <button class="btn btn-danger btn-sm" onclick="deleteGame()">Delete Game</button>
             </div>
             <div class="game-details">
                 <div class="form-group">
@@ -600,6 +669,24 @@ async function updateGameDetails() {
         });
     } catch (error) {
         console.error('Failed to update game details:', error);
+    }
+}
+
+async function deleteGame() {
+    const gameName = `${state.currentGame.team_name} vs ${state.currentGame.opponent_name || 'TBD'} (${state.currentGame.game_date})`;
+    
+    if (!confirm(`Are you sure you want to delete this game?\n\n${gameName}\n\nThis will delete all lineup data for this game and cannot be undone.`)) {
+        return;
+    }
+    
+    try {
+        await api(`/api/games/${state.currentGame.id}`, { method: 'DELETE' });
+        
+        // Reload the game lineup (will show create game UI if no game exists)
+        await loadGameLineup();
+    } catch (error) {
+        console.error('Failed to delete game:', error);
+        alert('Failed to delete game: ' + error.message);
     }
 }
 

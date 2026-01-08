@@ -528,6 +528,7 @@ def get_games():
 
 @app.route('/api/games/current', methods=['GET'])
 def get_current_game():
+    """Get the game for the next Thursday (does NOT auto-create)"""
     conn = get_db()
     c = conn.cursor()
     
@@ -548,26 +549,88 @@ def get_current_game():
     game = c.fetchone()
     
     if not game:
-        # Create new game
-        if has_publish_columns:
-            c.execute('INSERT INTO games (game_date, team_name, opponent_name, is_published) VALUES (?, ?, ?, 0)',
-                      (next_thursday, "Unsolicited Kick Pics", ""))
-        else:
-            c.execute('INSERT INTO games (game_date, team_name, opponent_name) VALUES (?, ?, ?)',
-                      (next_thursday, "Unsolicited Kick Pics", ""))
-        game_id = c.lastrowid
-        conn.commit()
-        game = {'id': game_id, 'game_date': str(next_thursday), 
-                'team_name': "Unsolicited Kick Pics", 'opponent_name': "", 'team_logo': None,
-                'is_published': False, 'published_at': None}
-    else:
-        game = dict(game)
-        game['is_published'] = bool(game.get('is_published')) if has_publish_columns else False
-        if not has_publish_columns:
-            game['published_at'] = None
+        # Return null to indicate no game exists (don't auto-create)
+        conn.close()
+        return jsonify({'exists': False, 'next_thursday': str(next_thursday)})
+    
+    game = dict(game)
+    game['exists'] = True
+    game['is_published'] = bool(game.get('is_published')) if has_publish_columns else False
+    if not has_publish_columns:
+        game['published_at'] = None
     
     conn.close()
     return jsonify(game)
+
+
+@app.route('/api/games', methods=['POST'])
+@login_required
+def create_game():
+    """Create a new game manually"""
+    data = request.json
+    game_date = data.get('game_date')
+    team_name = data.get('team_name', '')
+    opponent_name = data.get('opponent_name', '')
+    
+    if not game_date:
+        return jsonify({'error': 'Game date is required'}), 400
+    
+    conn = get_db()
+    c = conn.cursor()
+    
+    # Check if game already exists for this date
+    c.execute('SELECT id FROM games WHERE game_date = ?', (game_date,))
+    existing = c.fetchone()
+    if existing:
+        conn.close()
+        return jsonify({'error': 'A game already exists for this date'}), 400
+    
+    c.execute('INSERT INTO games (game_date, team_name, opponent_name, is_published) VALUES (?, ?, ?, 0)',
+              (game_date, team_name, opponent_name))
+    game_id = c.lastrowid
+    conn.commit()
+    conn.close()
+    
+    return jsonify({
+        'id': game_id,
+        'game_date': game_date,
+        'team_name': team_name,
+        'opponent_name': opponent_name,
+        'team_logo': None,
+        'is_published': False,
+        'published_at': None,
+        'exists': True
+    })
+
+
+@app.route('/api/games/<int:game_id>', methods=['DELETE'])
+@login_required
+def delete_game(game_id):
+    """Delete a game and all associated data"""
+    conn = get_db()
+    c = conn.cursor()
+    
+    # Delete associated data
+    c.execute('DELETE FROM lineup_positions WHERE game_id = ?', (game_id,))
+    c.execute('DELETE FROM game_player_status WHERE game_id = ?', (game_id,))
+    c.execute('DELETE FROM published_lineup WHERE game_id = ?', (game_id,))
+    c.execute('DELETE FROM published_player_order WHERE game_id = ?', (game_id,))
+    
+    # Delete the game's logo file if exists
+    c.execute('SELECT team_logo FROM games WHERE id = ?', (game_id,))
+    logo_row = c.fetchone()
+    if logo_row and logo_row['team_logo']:
+        logo_path = os.path.join(LOGO_FOLDER, logo_row['team_logo'])
+        if os.path.exists(logo_path):
+            os.remove(logo_path)
+    
+    # Delete the game
+    c.execute('DELETE FROM games WHERE id = ?', (game_id,))
+    
+    conn.commit()
+    conn.close()
+    
+    return jsonify({'success': True})
 
 
 @app.route('/api/games/<int:game_id>', methods=['GET'])

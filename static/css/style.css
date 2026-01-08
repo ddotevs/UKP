@@ -1321,10 +1321,39 @@ h4 { font-size: 1.25rem; }
     color: var(--text-muted);
 }
 
+.empty-state h3 {
+    color: var(--text-primary);
+    margin-bottom: var(--space-sm);
+}
+
 .empty-state-icon {
     font-size: 3rem;
     margin-bottom: var(--space-md);
     opacity: 0.5;
+}
+
+/* Create Game Form */
+.create-game-form {
+    margin-top: var(--space-xl);
+    text-align: left;
+    max-width: 500px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.create-game-form .form-row {
+    display: flex;
+    gap: var(--space-md);
+    margin-bottom: var(--space-md);
+}
+
+.create-game-form .form-group {
+    flex: 1;
+}
+
+.create-game-form button {
+    width: 100%;
+    margin-top: var(--space-md);
 }
 
 /* ========================================
