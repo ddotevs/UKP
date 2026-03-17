@@ -19,7 +19,9 @@ const state = {
     genders: {},
     sitOutCounts: {},
     positions: [],
-    abbreviations: {}
+    abbreviations: {},
+    currentViewGameId: null,
+    selectedPlayer: null
 };
 
 // ========================================
@@ -1331,6 +1333,7 @@ async function renderViewLineup(gameId, selectedPlayer = null) {
     // Store for player filter
     state.currentViewLineup = lineupData;
     state.currentViewGameId = gameId;
+    state.selectedPlayer = selectedPlayer;
     
     // Build game selector - show publish status for authenticated users
     const gameSelectorHtml = `
@@ -1518,8 +1521,11 @@ async function changeViewGame(gameId) {
     await renderViewLineup(parseInt(gameId));
 }
 
-function filterByPlayer(playerName) {
+function filterByPlayer(playerName, fromPopState = false) {
     if (state.currentViewGameId) {
+        if (playerName && !fromPopState) {
+            history.pushState({ view: 'playerDetail', player: playerName, gameId: state.currentViewGameId }, '');
+        }
         renderViewLineup(state.currentViewGameId, playerName || null);
     }
 }
@@ -1571,6 +1577,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('viewLineupPanel').style.display = state.currentTab === 'viewLineup' ? 'block' : 'none';
     
     await loadCurrentTab();
+    
+    window.addEventListener('popstate', (event) => {
+        if (state.currentViewGameId && state.selectedPlayer) {
+            filterByPlayer(null, true);
+        }
+    });
     
     // Login form
     document.getElementById('loginForm').addEventListener('submit', async (e) => {

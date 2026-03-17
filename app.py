@@ -578,13 +578,6 @@ def create_game():
     conn = get_db()
     c = conn.cursor()
     
-    # Check if game already exists for this date
-    c.execute('SELECT id FROM games WHERE game_date = ?', (game_date,))
-    existing = c.fetchone()
-    if existing:
-        conn.close()
-        return jsonify({'error': 'A game already exists for this date'}), 400
-    
     c.execute('INSERT INTO games (game_date, team_name, opponent_name, is_published) VALUES (?, ?, ?, 0)',
               (game_date, team_name, opponent_name))
     game_id = c.lastrowid
