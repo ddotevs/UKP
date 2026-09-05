@@ -13,6 +13,7 @@ import json
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import groupme as gm
+import requests as http_requests
 
 TZ = ZoneInfo('America/New_York')
 TARGET_HOUR = 10  # 10am Eastern
@@ -123,6 +124,43 @@ def get_players_in(game_id):
     return players
 
 
+def get_game_day_forecast(game_date, game_time=None):
+    """Fetch weather forecast for game day. Returns a one-line string or None."""
+    weather_key = get_setting('weather_api_key')
+    if not weather_key:
+        return None
+    try:
+        resp = http_requests.get('https://api.openweathermap.org/data/2.5/forecast', params={
+            'q': 'Sandy Springs,GA,US',
+            'appid': weather_key,
+            'units': 'imperial',
+        }, timeout=5)
+        resp.raise_for_status()
+        forecasts = resp.json().get('list', [])
+        # Target game time (default 7pm)
+        gd = datetime.strptime(game_date, '%Y-%m-%d')
+        target_hour = 19
+        if game_time and 'PM' in game_time.upper():
+            h = int(game_time.split(':')[0])
+            if h != 12:
+                target_hour = h + 12
+        target = gd.replace(hour=target_hour)
+        best = None
+        for fc in forecasts:
+            fc_dt = datetime.strptime(fc['dt_txt'], '%Y-%m-%d %H:%M:%S')
+            if best is None or abs((fc_dt - target).total_seconds()) < abs((best[0] - target).total_seconds()):
+                best = (fc_dt, fc)
+        if best:
+            fc = best[1]
+            temp = round(fc['main']['temp'])
+            desc = fc['weather'][0]['description']
+            pop = round(fc.get('pop', 0) * 100)
+            return f'Forecast: {temp}F, {desc}, {pop}% chance of rain'
+    except Exception as e:
+        print(f'Weather fetch failed: {e}')
+    return None
+
+
 def monday_post():
     """Post game event + announcement for the next unposted game."""
     token = get_setting('groupme_access_token')
@@ -142,6 +180,7 @@ def monday_post():
     game_time = game['game_time']
     main_roster = get_main_roster()
     gm_map = get_gm_map()
+    weather = get_game_day_forecast(game_date, game_time)
 
     results = {}
     gm_event_id = None
@@ -160,7 +199,7 @@ def monday_post():
 
     # Post message with @mentions
     try:
-        text, mentions = gm.build_game_message(game_date, opponent, main_roster, gm_map, game_time=game_time)
+        text, mentions = gm.build_game_message(game_date, opponent, main_roster, gm_map, game_time=game_time, weather_line=weather)
         gm.post_message(token, group_id, text, mentions)
         results['message'] = 'sent'
     except Exception as e:

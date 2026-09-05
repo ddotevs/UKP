@@ -100,12 +100,13 @@ def get_event_respondents(token, conversation_id, event_id):
         return set()
 
 
-def build_game_message(game_date, opponent, all_roster_names, groupme_user_map, game_time=None):
+def build_game_message(game_date, opponent, all_roster_names, groupme_user_map, game_time=None, weather_line=None):
     """Build a game announcement message tagging the main roster only.
     
     all_roster_names: list of main roster player names to tag
     groupme_user_map: dict of player_name -> groupme_user_id
     game_time: optional time string like '7:15 PM'
+    weather_line: optional weather forecast string to include
     Returns (text, mentions) tuple.
     """
     date_str = datetime.strptime(game_date, '%Y-%m-%d').strftime('%A, %B %-d')
@@ -115,6 +116,9 @@ def build_game_message(game_date, opponent, all_roster_names, groupme_user_map, 
         lines[0] += f' at {game_time}'
     if opponent:
         lines.append(f'vs. {opponent}')
+    if weather_line:
+        lines.append('')
+        lines.append(weather_line)
     lines.append('')
     lines.append('Are you in or out?')
     
