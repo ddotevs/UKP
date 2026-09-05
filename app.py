@@ -1503,6 +1503,10 @@ def groupme_callback():
     if not data:
         return '', 204
 
+    # Kill switch — set chatbot_enabled to 'false' to silence the bot
+    if get_setting('chatbot_enabled', 'true').lower() != 'true':
+        return '', 204
+
     response = chatbot.handle_message(data)
     if response:
         bot_id = get_setting('groupme_bot_id')
