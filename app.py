@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 from werkzeug.utils import secure_filename
 import groupme as gm
 from PIL import Image, ImageDraw, ImageFont
+import chatbot
 
 app = Flask(__name__, static_folder='static', static_url_path='/static')
 app.secret_key = os.environ.get('SECRET_KEY', 'ukp-kickball-secret-key-change-in-production')
@@ -1481,6 +1482,25 @@ def post_lineup_image_to_groupme(game_id):
         return jsonify({'success': True, 'image_url': image_url, 'message_id': msg_id})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+# ========== Chatbot Webhook ==========
+@app.route('/api/groupme/callback', methods=['POST'])
+def groupme_callback():
+    """Webhook endpoint for GroupMe bot callbacks. No auth required."""
+    data = request.json
+    if not data:
+        return '', 204
+
+    response = chatbot.handle_message(data)
+    if response:
+        bot_id = get_setting('groupme_bot_id')
+        if bot_id:
+            try:
+                gm.post_bot_message(bot_id, response)
+            except Exception:
+                pass
+    return '', 204
 
 
 if __name__ == '__main__':
