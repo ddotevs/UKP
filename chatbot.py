@@ -9,6 +9,7 @@ import os
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import groupme as gm
+import requests as http_requests
 
 TZ = ZoneInfo('America/New_York')
 
@@ -204,15 +205,57 @@ def cmd_directions(text):
 
 @command('weather', 'rain', 'forecast', 'is it going to rain')
 def cmd_weather(text):
-    park_address = get_setting('park_address')
-    if not park_address:
-        return "Park address not configured — can't check weather."
-    # Placeholder — needs a weather API key to be useful
     weather_key = get_setting('weather_api_key')
     if not weather_key:
-        return f"Weather API not configured yet. Check the forecast for:\nhttps://weather.com/weather/today/l/{park_address.replace(' ', '+')}"
-    # TODO: implement OpenWeatherMap call
-    return "Weather check coming soon!"
+        return "Weather API not configured yet."
+
+    # Get next game date to show game-day forecast
+    game = get_next_game()
+    game_date = None
+    if game:
+        game_date = datetime.strptime(game['game_date'], '%Y-%m-%d')
+
+    try:
+        # Current weather
+        resp = http_requests.get('https://api.openweathermap.org/data/2.5/weather', params={
+            'q': 'Sandy Springs,GA,US',
+            'appid': weather_key,
+            'units': 'imperial',
+        }, timeout=5)
+        resp.raise_for_status()
+        current = resp.json()
+        temp = round(current['main']['temp'])
+        desc = current['weather'][0]['description']
+        humidity = current['main']['humidity']
+        result = f"Right now in Sandy Springs: {temp}°F, {desc}, {humidity}% humidity"
+
+        # If game is within 5 days, get forecast for game day
+        if game_date:
+            days_out = (game_date - datetime.now()).days
+            if 0 <= days_out <= 5:
+                fc_resp = http_requests.get('https://api.openweathermap.org/data/2.5/forecast', params={
+                    'q': 'Sandy Springs,GA,US',
+                    'appid': weather_key,
+                    'units': 'imperial',
+                }, timeout=5)
+                fc_resp.raise_for_status()
+                forecasts = fc_resp.json().get('list', [])
+                # Find forecast closest to game time (7pm on game day)
+                game_target = game_date.replace(hour=19)
+                best = None
+                for fc in forecasts:
+                    fc_dt = datetime.strptime(fc['dt_txt'], '%Y-%m-%d %H:%M:%S')
+                    if best is None or abs((fc_dt - game_target).total_seconds()) < abs((best[0] - game_target).total_seconds()):
+                        best = (fc_dt, fc)
+                if best:
+                    fc_data = best[1]
+                    fc_temp = round(fc_data['main']['temp'])
+                    fc_desc = fc_data['weather'][0]['description']
+                    fc_pop = round(fc_data.get('pop', 0) * 100)
+                    result += f"\n\nGame day forecast ({game_date.strftime('%A')} ~7pm): {fc_temp}°F, {fc_desc}, {fc_pop}% chance of rain"
+        return result
+    except Exception as e:
+        return f"Couldn't fetch weather: {e}"
 
 
 # ========================================
