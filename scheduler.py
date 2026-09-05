@@ -51,6 +51,32 @@ def get_gm_map():
     return gm_map
 
 
+def ensure_next_game_exists():
+    """Create the next game in the DB from the stored schedule if it doesn't exist yet."""
+    schedule_json = get_setting('fall_26_schedule')
+    if not schedule_json:
+        return
+    schedule = json.loads(schedule_json)
+    today = datetime.now(TZ).strftime('%Y-%m-%d')
+    conn = get_db()
+    c = conn.cursor()
+    for entry in schedule:
+        game_date = entry['date']
+        if game_date < today:
+            continue
+        # Check if this game already exists
+        c.execute('SELECT id FROM games WHERE game_date = ?', (game_date,))
+        if c.fetchone():
+            continue
+        # Create it
+        c.execute('INSERT INTO games (game_date, team_name, opponent_name, game_time) VALUES (?, ?, ?, ?)',
+                  (game_date, 'Unsolicited Kick Pics', entry['opponent'], entry['time']))
+        conn.commit()
+        print(f'Created game: {game_date} vs {entry["opponent"]} at {entry["time"]}')
+        break  # Only create the next one
+    conn.close()
+
+
 def find_next_game():
     """Find the next upcoming game that hasn't been posted to GroupMe yet."""
     conn = get_db()
@@ -163,6 +189,9 @@ def get_game_day_forecast(game_date, game_time=None):
 
 def monday_post():
     """Post game event + announcement for the next unposted game."""
+    # Ensure the next game exists in the DB from the stored schedule
+    ensure_next_game_exists()
+
     token = get_setting('groupme_access_token')
     group_id = get_setting('groupme_group_id')
     if not token or not group_id:
