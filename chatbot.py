@@ -34,6 +34,18 @@ def get_setting(key, default=None):
     return row['value'] if row else default
 
 
+def get_gm_map():
+    """Build player_name -> groupme_user_id map from both roster tables."""
+    conn = get_db()
+    c = conn.cursor()
+    c.execute('SELECT player_name, groupme_user_id FROM main_roster WHERE groupme_user_id IS NOT NULL')
+    gm_map = {row['player_name']: row['groupme_user_id'] for row in c.fetchall()}
+    c.execute('SELECT player_name, groupme_user_id FROM substitutes WHERE groupme_user_id IS NOT NULL')
+    gm_map.update({row['player_name']: row['groupme_user_id'] for row in c.fetchall()})
+    conn.close()
+    return gm_map
+
+
 # ========================================
 # Command Registry
 # ========================================
@@ -103,12 +115,35 @@ def cmd_whos_in(text):
         return "No upcoming games on the schedule."
     conn = get_db()
     c = conn.cursor()
-    c.execute("SELECT player_name FROM game_player_status WHERE game_id = ? AND status = 'IN' ORDER BY kicking_order, player_name", (game['id'],))
-    players = [row['player_name'] for row in c.fetchall()]
+    # Check if event has been posted for this game
+    c.execute("SELECT groupme_event_id FROM groupme_events WHERE game_id = ? AND event_type = 'event' LIMIT 1", (game['id'],))
+    row = c.fetchone()
     conn.close()
-    if not players:
-        return "Nobody has been marked IN yet for this game."
-    return f"Playing this week ({len(players)}):\n" + '\n'.join(f"  {i+1}. {p}" for i, p in enumerate(players))
+
+    if not row or not row['groupme_event_id']:
+        return "No event posted for this game yet — can't check responses."
+
+    token = get_setting('groupme_access_token')
+    group_id = get_setting('groupme_group_id')
+    if not token or not group_id:
+        return "GroupMe not configured."
+
+    responses = gm.get_event_respondents(token, group_id, row['groupme_event_id'])
+    going_ids = responses['going']
+
+    if not going_ids:
+        return "Nobody has responded 'going' yet."
+
+    # Map user IDs back to player names
+    gm_map = get_gm_map()
+    id_to_player = {v: k for k, v in gm_map.items()}
+    going_names = sorted([id_to_player[uid] for uid in going_ids if uid in id_to_player])
+    unknown = len(going_ids) - len(going_names)
+
+    result = f"Going ({len(going_ids)}):\n" + '\n'.join(f"  {i+1}. {p}" for i, p in enumerate(going_names))
+    if unknown:
+        result += f"\n  + {unknown} not linked to roster"
+    return result
 
 
 @command('countdown', 'how many days', 'days until')
@@ -144,17 +179,28 @@ def cmd_non_responders(text):
         conn.close()
         return "No event posted for this game yet."
     event_id = row['groupme_event_id']
-    # Get all players with GroupMe IDs
+    # Get main roster players with GroupMe IDs
     c.execute('SELECT player_name, groupme_user_id FROM main_roster WHERE groupme_user_id IS NOT NULL')
-    gm_map = {row['groupme_user_id']: row['player_name'] for row in c.fetchall()}
-    c.execute('SELECT player_name, groupme_user_id FROM substitutes WHERE groupme_user_id IS NOT NULL')
-    gm_map.update({row['groupme_user_id']: row['player_name'] for row in c.fetchall()})
+    id_to_player = {row['groupme_user_id']: row['player_name'] for row in c.fetchall()}
     conn.close()
-    responded = gm.get_event_respondents(token, group_id, event_id)
-    non_resp = [name for uid, name in gm_map.items() if uid not in responded]
-    if not non_resp:
+
+    responses = gm.get_event_respondents(token, group_id, event_id)
+    # "Responded" = going OR not_going (they gave a definitive answer)
+    definitive = responses['going'] | responses['not_going']
+    # Non-responders = maybe + no response at all
+    non_resp = [name for uid, name in id_to_player.items() if uid not in definitive]
+    maybe_names = [id_to_player[uid] for uid in responses['maybe'] if uid in id_to_player]
+
+    if not non_resp and not maybe_names:
         return "Everyone has responded! We're locked in."
-    return f"Still waiting on ({len(non_resp)}):\n" + '\n'.join(f"  - {p}" for p in sorted(non_resp))
+
+    parts = []
+    if maybe_names:
+        parts.append(f"Maybe ({len(maybe_names)}):\n" + '\n'.join(f"  - {p}" for p in sorted(maybe_names)))
+    no_answer = [p for p in non_resp if p not in maybe_names]
+    if no_answer:
+        parts.append(f"No response ({len(no_answer)}):\n" + '\n'.join(f"  - {p}" for p in sorted(no_answer)))
+    return '\n\n'.join(parts)
 
 
 # ========================================

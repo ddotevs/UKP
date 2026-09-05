@@ -86,18 +86,25 @@ def get_event(token, conversation_id, event_id):
 
 
 def get_event_respondents(token, conversation_id, event_id):
-    """Get the set of user_ids who have responded (going/not going) to an event."""
+    """Get categorized event responses.
+    Returns dict with 'going', 'not_going', and 'maybe' sets of user_ids.
+    """
     try:
         data = get_event(token, conversation_id, event_id)
         event = data.get('response', {}).get('event', {})
-        responded = set()
+        result = {'going': set(), 'not_going': set(), 'maybe': set()}
         for user in event.get('going', []):
-            responded.add(str(user.get('user_id', user) if isinstance(user, dict) else user))
+            uid = str(user.get('user_id', user) if isinstance(user, dict) else user)
+            result['going'].add(uid)
         for user in event.get('not_going', []):
-            responded.add(str(user.get('user_id', user) if isinstance(user, dict) else user))
-        return responded
+            uid = str(user.get('user_id', user) if isinstance(user, dict) else user)
+            result['not_going'].add(uid)
+        for user in event.get('maybe', []):
+            uid = str(user.get('user_id', user) if isinstance(user, dict) else user)
+            result['maybe'].add(uid)
+        return result
     except Exception:
-        return set()
+        return {'going': set(), 'not_going': set(), 'maybe': set()}
 
 
 def build_game_message(game_date, opponent, all_roster_names, groupme_user_map, game_time=None, weather_line=None):

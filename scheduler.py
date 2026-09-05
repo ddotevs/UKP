@@ -237,17 +237,21 @@ def reminder_post():
         return
 
     gm_map = get_gm_map()
-    # Invert: groupme_user_id -> player_name
-    id_to_player = {v: k for k, v in gm_map.items()}
-    all_gm_ids = set(gm_map.values())
+    # Invert: groupme_user_id -> player_name (main roster only)
+    conn = get_db()
+    c = conn.cursor()
+    c.execute('SELECT player_name, groupme_user_id FROM main_roster WHERE groupme_user_id IS NOT NULL')
+    id_to_player = {row['groupme_user_id']: row['player_name'] for row in c.fetchall()}
+    conn.close()
 
-    # Get who has responded
-    responded = set()
+    # Get categorized responses
+    responses = {'going': set(), 'not_going': set(), 'maybe': set()}
     if gm_event_id:
-        responded = gm.get_event_respondents(token, group_id, gm_event_id)
+        responses = gm.get_event_respondents(token, group_id, gm_event_id)
 
-    non_responder_ids = all_gm_ids - responded
-    non_responders = [id_to_player[uid] for uid in non_responder_ids if uid in id_to_player]
+    # Definitive = going or not_going. Tag everyone else (maybe + no response).
+    definitive = responses['going'] | responses['not_going']
+    non_responders = [name for uid, name in id_to_player.items() if uid not in definitive]
 
     if not non_responders:
         print('Everyone has responded!')
