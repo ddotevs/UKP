@@ -56,7 +56,7 @@ def find_next_game():
     c = conn.cursor()
     today = datetime.now(TZ).strftime('%Y-%m-%d')
     c.execute('''
-        SELECT g.id, g.game_date, g.opponent_name 
+        SELECT g.id, g.game_date, g.opponent_name, g.game_time 
         FROM games g
         WHERE g.game_date >= ?
         AND g.id NOT IN (SELECT game_id FROM groupme_events WHERE event_type = 'event')
@@ -104,6 +104,18 @@ def already_reminded_today(game_id):
     return exists
 
 
+def get_all_roster():
+    """Get all player names from main roster and substitutes."""
+    conn = get_db()
+    c = conn.cursor()
+    c.execute('SELECT player_name FROM main_roster ORDER BY player_name')
+    names = [row['player_name'] for row in c.fetchall()]
+    c.execute('SELECT player_name FROM substitutes ORDER BY player_name')
+    names.extend([row['player_name'] for row in c.fetchall()])
+    conn.close()
+    return names
+
+
 def get_players_in(game_id):
     conn = get_db()
     c = conn.cursor()
@@ -129,7 +141,8 @@ def monday_post():
     game_id = game['id']
     game_date = game['game_date']
     opponent = game['opponent_name']
-    players_in = get_players_in(game_id)
+    game_time = game['game_time']
+    all_roster = get_all_roster()
     gm_map = get_gm_map()
 
     results = {}
@@ -149,7 +162,7 @@ def monday_post():
 
     # Post message with @mentions
     try:
-        text, mentions = gm.build_game_message(game_date, opponent, players_in, gm_map)
+        text, mentions = gm.build_game_message(game_date, opponent, all_roster, gm_map, game_time=game_time)
         gm.post_message(token, group_id, text, mentions)
         results['message'] = 'sent'
     except Exception as e:

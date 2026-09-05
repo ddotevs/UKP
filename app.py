@@ -258,6 +258,16 @@ def migrate_db():
     except:
         pass
     
+    # Add game_time column to games if missing
+    try:
+        c.execute("PRAGMA table_info(games)")
+        columns = [row[1] for row in c.fetchall()]
+        if 'game_time' not in columns:
+            c.execute('ALTER TABLE games ADD COLUMN game_time TEXT')
+            conn.commit()
+    except:
+        pass
+    
     conn.close()
 
 
@@ -1250,15 +1260,17 @@ def post_groupme_event(game_id):
         return jsonify({'error': 'Event already posted for this game'}), 400
 
     # Get game info
-    c.execute('SELECT game_date, opponent_name FROM games WHERE id = ?', (game_id,))
+    c.execute('SELECT game_date, opponent_name, game_time FROM games WHERE id = ?', (game_id,))
     game = c.fetchone()
     if not game:
         conn.close()
         return jsonify({'error': 'Game not found'}), 404
 
-    # Get players marked IN
-    c.execute("SELECT player_name FROM game_player_status WHERE game_id = ? AND status = 'IN'", (game_id,))
-    players_in = [row['player_name'] for row in c.fetchall()]
+    # Get all roster players for tagging
+    c.execute('SELECT player_name FROM main_roster ORDER BY player_name')
+    all_roster = [row['player_name'] for row in c.fetchall()]
+    c.execute('SELECT player_name FROM substitutes ORDER BY player_name')
+    all_roster.extend([row['player_name'] for row in c.fetchall()])
 
     # Build groupme user map from both roster tables
     c.execute('SELECT player_name, groupme_user_id FROM main_roster WHERE groupme_user_id IS NOT NULL')
@@ -1268,6 +1280,7 @@ def post_groupme_event(game_id):
 
     game_date = game['game_date']
     opponent = game['opponent_name']
+    game_time = game['game_time']
 
     results = {}
     gm_event_id = None
@@ -1287,7 +1300,7 @@ def post_groupme_event(game_id):
 
     # 2) Post message with @mentions
     try:
-        text, mentions = gm.build_game_message(game_date, opponent, players_in, gm_map)
+        text, mentions = gm.build_game_message(game_date, opponent, all_roster, gm_map, game_time=game_time)
         gm.post_message(token, group_id, text, mentions)
         results['message'] = 'sent'
     except Exception as e:

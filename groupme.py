@@ -100,24 +100,28 @@ def get_event_respondents(token, conversation_id, event_id):
         return set()
 
 
-def build_game_message(game_date, opponent, players_in, groupme_user_map):
-    """Build a game announcement message with @mentions for players marked IN.
+def build_game_message(game_date, opponent, all_roster_names, groupme_user_map, game_time=None):
+    """Build a game announcement message tagging the full roster.
     
+    all_roster_names: list of all player names to tag
     groupme_user_map: dict of player_name -> groupme_user_id
+    game_time: optional time string like '7:15 PM'
     Returns (text, mentions) tuple.
     """
     date_str = datetime.strptime(game_date, '%Y-%m-%d').strftime('%A, %B %-d')
     
     lines = [f'Game Day: {date_str}']
+    if game_time:
+        lines[0] += f' at {game_time}'
     if opponent:
         lines.append(f'vs. {opponent}')
     lines.append('')
-    lines.append('Who\'s playing:')
+    lines.append('Are you in or out?')
     
     text_so_far = '\n'.join(lines) + '\n'
     mentions = []
     
-    for player in sorted(players_in):
+    for player in sorted(all_roster_names):
         gm_id = groupme_user_map.get(player)
         tag = f'@{player}'
         if gm_id:

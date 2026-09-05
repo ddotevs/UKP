@@ -69,7 +69,7 @@ def get_next_game():
     conn = get_db()
     c = conn.cursor()
     today = datetime.now(TZ).strftime('%Y-%m-%d')
-    c.execute('SELECT id, game_date, team_name, opponent_name FROM games WHERE game_date >= ? ORDER BY game_date ASC LIMIT 1', (today,))
+    c.execute('SELECT id, game_date, team_name, opponent_name, game_time FROM games WHERE game_date >= ? ORDER BY game_date ASC LIMIT 1', (today,))
     game = c.fetchone()
     conn.close()
     return game
@@ -82,7 +82,7 @@ def cmd_game_time(text):
         return "No upcoming games on the schedule."
     date = datetime.strptime(game['game_date'], '%Y-%m-%d')
     day_str = date.strftime('%A, %B %-d')
-    game_time = get_setting('default_game_time', '7:00 PM')
+    game_time = game['game_time'] or get_setting('default_game_time', '7:00 PM')
     return f"Next game: {day_str} at {game_time}"
 
 
