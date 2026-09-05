@@ -1406,7 +1406,9 @@ def get_lineup_image(game_id):
 @app.route('/api/groupme/post-lineup-image/<int:game_id>', methods=['POST'])
 @login_required
 def post_lineup_image_to_groupme(game_id):
-    """Render the lineup as an image and post it to GroupMe."""
+    """Render the lineup as an image and post it to GroupMe.
+    On re-publish, deletes the old message first, then posts + pins the new one.
+    """
     token = get_setting('groupme_access_token')
     group_id = get_setting('groupme_group_id')
     if not token or not group_id:
@@ -1417,16 +1419,48 @@ def post_lineup_image_to_groupme(game_id):
         return jsonify({'error': 'No lineup to render'}), 404
 
     try:
-        image_url = gm.upload_image(token, img_bytes)
         conn = get_db()
         c = conn.cursor()
+
+        # Check for a previous lineup image message to delete
+        c.execute('''SELECT groupme_event_id FROM groupme_events 
+                    WHERE game_id = ? AND event_type = 'lineup_image' 
+                    ORDER BY posted_at DESC LIMIT 1''', (game_id,))
+        prev = c.fetchone()
+        if prev and prev['groupme_event_id']:
+            try:
+                gm.delete_message(token, group_id, prev['groupme_event_id'])
+            except Exception:
+                pass  # old message may already be gone
+
+        # Upload new image and post
+        image_url = gm.upload_image(token, img_bytes)
         c.execute('SELECT game_date, opponent_name FROM games WHERE id = ?', (game_id,))
         game = c.fetchone()
-        conn.close()
 
         caption = f'Lineup: {game["game_date"]} vs {game["opponent_name"] or "TBD"}'
-        gm.post_image_message(token, group_id, caption, image_url)
-        return jsonify({'success': True, 'image_url': image_url})
+        resp = gm.post_image_message(token, group_id, caption, image_url)
+
+        # Extract the message_id from the response
+        msg_id = None
+        msg_data = resp.get('response', {}).get('message', {})
+        if isinstance(msg_data, dict):
+            msg_id = msg_data.get('id')
+
+        # Pin the new message
+        if msg_id:
+            try:
+                gm.pin_message(token, group_id, msg_id)
+            except Exception:
+                pass  # pinning is best-effort
+
+        # Track it (store message_id in groupme_event_id for future delete/replace)
+        c.execute('INSERT INTO groupme_events (game_id, event_type, groupme_event_id, groupme_response) VALUES (?, ?, ?, ?)',
+                  (game_id, 'lineup_image', msg_id, f'image_url={image_url}'))
+        conn.commit()
+        conn.close()
+
+        return jsonify({'success': True, 'image_url': image_url, 'message_id': msg_id})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

@@ -170,7 +170,9 @@ def upload_image(token, image_bytes):
 
 
 def post_image_message(token, group_id, text, image_url):
-    """Post a message with an attached image to a GroupMe group."""
+    """Post a message with an attached image to a GroupMe group.
+    Returns the full response including the message_id.
+    """
     payload = {
         'message': {
             'source_guid': f'ukp-img-{datetime.now().strftime("%Y%m%d%H%M%S%f")}',
@@ -185,6 +187,26 @@ def post_image_message(token, group_id, text, image_url):
         f'{BASE_URL}/groups/{group_id}/messages',
         params={'token': token},
         json=payload,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+def delete_message(token, conversation_id, message_id):
+    """Delete a message from a GroupMe conversation."""
+    resp = requests.delete(
+        f'{BASE_URL}/conversations/{conversation_id}/messages/{message_id}',
+        params={'token': token},
+    )
+    resp.raise_for_status()
+    return resp.status_code
+
+
+def pin_message(token, conversation_id, message_id):
+    """Pin a message in a GroupMe conversation."""
+    resp = requests.post(
+        f'{BASE_URL}/conversations/{conversation_id}/messages/{message_id}/pin',
+        params={'token': token},
     )
     resp.raise_for_status()
     return resp.json()
