@@ -101,9 +101,9 @@ def get_event_respondents(token, conversation_id, event_id):
 
 
 def build_game_message(game_date, opponent, all_roster_names, groupme_user_map, game_time=None):
-    """Build a game announcement message tagging the full roster.
+    """Build a game announcement message tagging the main roster only.
     
-    all_roster_names: list of all player names to tag
+    all_roster_names: list of main roster player names to tag
     groupme_user_map: dict of player_name -> groupme_user_id
     game_time: optional time string like '7:15 PM'
     Returns (text, mentions) tuple.

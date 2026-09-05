@@ -1266,11 +1266,9 @@ def post_groupme_event(game_id):
         conn.close()
         return jsonify({'error': 'Game not found'}), 404
 
-    # Get all roster players for tagging
+    # Get main roster players for tagging (not subs)
     c.execute('SELECT player_name FROM main_roster ORDER BY player_name')
     all_roster = [row['player_name'] for row in c.fetchall()]
-    c.execute('SELECT player_name FROM substitutes ORDER BY player_name')
-    all_roster.extend([row['player_name'] for row in c.fetchall()])
 
     # Build groupme user map from both roster tables
     c.execute('SELECT player_name, groupme_user_id FROM main_roster WHERE groupme_user_id IS NOT NULL')

@@ -104,14 +104,12 @@ def already_reminded_today(game_id):
     return exists
 
 
-def get_all_roster():
-    """Get all player names from main roster and substitutes."""
+def get_main_roster():
+    """Get main roster player names only (not subs)."""
     conn = get_db()
     c = conn.cursor()
     c.execute('SELECT player_name FROM main_roster ORDER BY player_name')
     names = [row['player_name'] for row in c.fetchall()]
-    c.execute('SELECT player_name FROM substitutes ORDER BY player_name')
-    names.extend([row['player_name'] for row in c.fetchall()])
     conn.close()
     return names
 
@@ -142,7 +140,7 @@ def monday_post():
     game_date = game['game_date']
     opponent = game['opponent_name']
     game_time = game['game_time']
-    all_roster = get_all_roster()
+    main_roster = get_main_roster()
     gm_map = get_gm_map()
 
     results = {}
@@ -162,7 +160,7 @@ def monday_post():
 
     # Post message with @mentions
     try:
-        text, mentions = gm.build_game_message(game_date, opponent, all_roster, gm_map, game_time=game_time)
+        text, mentions = gm.build_game_message(game_date, opponent, main_roster, gm_map, game_time=game_time)
         gm.post_message(token, group_id, text, mentions)
         results['message'] = 'sent'
     except Exception as e:
