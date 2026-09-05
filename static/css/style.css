@@ -1446,3 +1446,75 @@ h4 { font-size: 1.25rem; }
     }
 }
 
+/* ========================================
+   GroupMe Styles
+   ======================================== */
+.btn-groupme {
+    background: #00aff0;
+    color: #fff;
+    border: none;
+}
+
+.btn-groupme:hover {
+    background: #0098d4;
+}
+
+.groupme-linked {
+    font-size: 0.7em;
+    background: #00aff0;
+    color: #fff;
+    padding: 1px 5px;
+    border-radius: 3px;
+    margin-left: 6px;
+    font-weight: 600;
+    vertical-align: middle;
+}
+
+.groupme-link-btn {
+    font-size: 0.75em;
+    padding: 2px 8px;
+    color: var(--text-muted);
+    border: 1px solid var(--border-color);
+}
+
+.settings-form .form-group {
+    margin-bottom: var(--space-md);
+}
+
+.settings-form small {
+    display: block;
+    margin-top: 4px;
+}
+
+.view-header-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+}
+
+/* Drag and drop */
+.drag-handle {
+    cursor: grab;
+    color: var(--text-muted);
+    font-size: 1.1em;
+    padding: 0 4px;
+    user-select: none;
+    touch-action: none;
+}
+
+.drag-handle:active {
+    cursor: grabbing;
+}
+
+.sortable-ghost {
+    opacity: 0.3;
+}
+
+.sortable-chosen {
+    background: var(--bg-tertiary) !important;
+}
+
+.sortable-drag {
+    background: var(--bg-card);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+}

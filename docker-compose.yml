@@ -11,3 +11,10 @@ services:
     environment:
       - SECRET_KEY=${SECRET_KEY:-ukp-kickball-secret-key-change-in-production}
       - FLASK_DEBUG=false
+
+  scheduler:
+    build: .
+    command: python scheduler.py
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped

@@ -6,9 +6,12 @@ from functools import wraps
 import sqlite3
 import hashlib
 import os
+import io
 import uuid
 from datetime import datetime, timedelta
 from werkzeug.utils import secure_filename
+import groupme as gm
+from PIL import Image, ImageDraw, ImageFont
 
 app = Flask(__name__, static_folder='static', static_url_path='/static')
 app.secret_key = os.environ.get('SECRET_KEY', 'ukp-kickball-secret-key-change-in-production')
@@ -149,6 +152,27 @@ def init_db():
         )
     ''')
     
+    # Settings table (key/value for GroupMe config etc.)
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        )
+    ''')
+    
+    # GroupMe event tracking (avoid duplicate posts)
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS groupme_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            game_id INTEGER NOT NULL,
+            event_type TEXT NOT NULL,
+            groupme_event_id TEXT,
+            groupme_response TEXT,
+            posted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (game_id) REFERENCES games(id)
+        )
+    ''')
+    
     conn.commit()
     conn.close()
     migrate_db()
@@ -208,6 +232,27 @@ def migrate_db():
             conn.commit()
         if 'published_at' not in columns:
             c.execute('ALTER TABLE games ADD COLUMN published_at TIMESTAMP')
+            conn.commit()
+    except:
+        pass
+    
+    # Add groupme_user_id column to main_roster and substitutes if missing
+    for table in ('main_roster', 'substitutes'):
+        try:
+            c.execute(f"PRAGMA table_info({table})")
+            columns = [row[1] for row in c.fetchall()]
+            if 'groupme_user_id' not in columns:
+                c.execute(f'ALTER TABLE {table} ADD COLUMN groupme_user_id TEXT')
+                conn.commit()
+        except:
+            pass
+    
+    # Add groupme_event_id column to groupme_events if missing
+    try:
+        c.execute("PRAGMA table_info(groupme_events)")
+        columns = [row[1] for row in c.fetchall()]
+        if 'groupme_event_id' not in columns:
+            c.execute('ALTER TABLE groupme_events ADD COLUMN groupme_event_id TEXT')
             conn.commit()
     except:
         pass
@@ -392,8 +437,8 @@ def delete_user(user_id):
 def get_roster():
     conn = get_db()
     c = conn.cursor()
-    c.execute('SELECT player_name, is_female FROM main_roster ORDER BY player_name')
-    roster = [{'name': row['player_name'], 'isFemale': bool(row['is_female'])} for row in c.fetchall()]
+    c.execute('SELECT player_name, is_female, groupme_user_id FROM main_roster ORDER BY player_name')
+    roster = [{'name': row['player_name'], 'isFemale': bool(row['is_female']), 'groupmeUserId': row['groupme_user_id']} for row in c.fetchall()]
     conn.close()
     return jsonify(roster)
 
@@ -448,8 +493,8 @@ def toggle_player_gender(name):
 def get_substitutes():
     conn = get_db()
     c = conn.cursor()
-    c.execute('SELECT player_name, is_female FROM substitutes ORDER BY player_name')
-    subs = [{'name': row['player_name'], 'isFemale': bool(row['is_female'])} for row in c.fetchall()]
+    c.execute('SELECT player_name, is_female, groupme_user_id FROM substitutes ORDER BY player_name')
+    subs = [{'name': row['player_name'], 'isFemale': bool(row['is_female']), 'groupmeUserId': row['groupme_user_id']} for row in c.fetchall()]
     conn.close()
     return jsonify(subs)
 
@@ -962,6 +1007,23 @@ def update_player_order(game_id, player_name):
     return jsonify({'success': True})
 
 
+@app.route('/api/games/<int:game_id>/reorder', methods=['PUT'])
+@login_required
+def reorder_players(game_id):
+    """Bulk reorder players. Expects {"order": ["Player A", "Player B", ...]}"""
+    data = request.json
+    order = data.get('order', [])
+    
+    conn = get_db()
+    c = conn.cursor()
+    for idx, player_name in enumerate(order):
+        c.execute('UPDATE game_player_status SET kicking_order = ? WHERE game_id = ? AND player_name = ?',
+                  (idx, game_id, player_name))
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True})
+
+
 # ========== Publish Routes ==========
 @app.route('/api/games/<int:game_id>/publish', methods=['POST'])
 @login_required
@@ -1081,6 +1143,292 @@ def get_published_lineup(game_id):
         'positions': POSITIONS,
         'abbreviations': POSITION_ABBREVIATIONS
     })
+
+
+# ========== Settings Routes ==========
+def get_setting(key, default=None):
+    conn = get_db()
+    c = conn.cursor()
+    c.execute('SELECT value FROM settings WHERE key = ?', (key,))
+    row = c.fetchone()
+    conn.close()
+    return row['value'] if row else default
+
+
+def set_setting(key, value):
+    conn = get_db()
+    c = conn.cursor()
+    c.execute('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', (key, value))
+    conn.commit()
+    conn.close()
+
+
+@app.route('/api/settings', methods=['GET'])
+@login_required
+def get_settings():
+    return jsonify({
+        'groupme_access_token': get_setting('groupme_access_token', ''),
+        'groupme_group_id': get_setting('groupme_group_id', ''),
+    })
+
+
+@app.route('/api/settings', methods=['POST'])
+@login_required
+def update_settings():
+    data = request.json
+    for key in ('groupme_access_token', 'groupme_group_id'):
+        if key in data:
+            set_setting(key, data[key].strip())
+    return jsonify({'success': True})
+
+
+# ========== GroupMe Routes ==========
+@app.route('/api/roster/<name>/groupme', methods=['PUT'])
+@login_required
+def set_player_groupme(name):
+    data = request.json
+    gm_id = data.get('groupmeUserId', '').strip()
+    conn = get_db()
+    c = conn.cursor()
+    # Try main roster first, then substitutes
+    c.execute('UPDATE main_roster SET groupme_user_id = ? WHERE player_name = ?', (gm_id or None, name))
+    if c.rowcount == 0:
+        c.execute('UPDATE substitutes SET groupme_user_id = ? WHERE player_name = ?', (gm_id or None, name))
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True})
+
+
+@app.route('/api/groupme/members', methods=['GET'])
+@login_required
+def groupme_members():
+    token = get_setting('groupme_access_token')
+    group_id = get_setting('groupme_group_id')
+    if not token or not group_id:
+        return jsonify({'error': 'GroupMe not configured. Set token and group ID in Settings.'}), 400
+    try:
+        members = gm.get_group_members(token, group_id)
+        return jsonify(members)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/groupme/post-event/<int:game_id>', methods=['POST'])
+@login_required
+def post_groupme_event(game_id):
+    token = get_setting('groupme_access_token')
+    group_id = get_setting('groupme_group_id')
+    if not token or not group_id:
+        return jsonify({'error': 'GroupMe not configured'}), 400
+
+    conn = get_db()
+    c = conn.cursor()
+
+    # Check if already posted
+    c.execute('SELECT id FROM groupme_events WHERE game_id = ? AND event_type = ?', (game_id, 'event'))
+    if c.fetchone():
+        conn.close()
+        return jsonify({'error': 'Event already posted for this game'}), 400
+
+    # Get game info
+    c.execute('SELECT game_date, opponent_name FROM games WHERE id = ?', (game_id,))
+    game = c.fetchone()
+    if not game:
+        conn.close()
+        return jsonify({'error': 'Game not found'}), 404
+
+    # Get players marked IN
+    c.execute("SELECT player_name FROM game_player_status WHERE game_id = ? AND status = 'IN'", (game_id,))
+    players_in = [row['player_name'] for row in c.fetchall()]
+
+    # Build groupme user map from both roster tables
+    c.execute('SELECT player_name, groupme_user_id FROM main_roster WHERE groupme_user_id IS NOT NULL')
+    gm_map = {row['player_name']: row['groupme_user_id'] for row in c.fetchall()}
+    c.execute('SELECT player_name, groupme_user_id FROM substitutes WHERE groupme_user_id IS NOT NULL')
+    gm_map.update({row['player_name']: row['groupme_user_id'] for row in c.fetchall()})
+
+    game_date = game['game_date']
+    opponent = game['opponent_name']
+
+    results = {}
+    gm_event_id = None
+
+    # 1) Create calendar event
+    try:
+        event_name = f'Kickball vs. {opponent}' if opponent else 'Kickball Game'
+        start_at = f'{game_date}T19:00:00-04:00'
+        event_resp = gm.create_event(token, group_id, event_name, start_at=start_at)
+        # Try to extract the event ID from the response
+        resp_data = event_resp.get('response', {})
+        if isinstance(resp_data, dict):
+            gm_event_id = resp_data.get('event', {}).get('event_id') or resp_data.get('event_id')
+        results['event'] = 'created'
+    except Exception as e:
+        results['event'] = f'failed: {e}'
+
+    # 2) Post message with @mentions
+    try:
+        text, mentions = gm.build_game_message(game_date, opponent, players_in, gm_map)
+        gm.post_message(token, group_id, text, mentions)
+        results['message'] = 'sent'
+    except Exception as e:
+        results['message'] = f'failed: {e}'
+
+    # Track it
+    c.execute('INSERT INTO groupme_events (game_id, event_type, groupme_event_id, groupme_response) VALUES (?, ?, ?, ?)',
+              (game_id, 'event', gm_event_id, str(results)))
+    conn.commit()
+    conn.close()
+
+    return jsonify({'success': True, 'results': results})
+
+
+@app.route('/api/groupme/status/<int:game_id>', methods=['GET'])
+@login_required
+def groupme_status(game_id):
+    conn = get_db()
+    c = conn.cursor()
+    c.execute('SELECT event_type, posted_at, groupme_response FROM groupme_events WHERE game_id = ? ORDER BY posted_at DESC', (game_id,))
+    events = [{'type': row['event_type'], 'postedAt': row['posted_at'], 'response': row['groupme_response']} for row in c.fetchall()]
+    conn.close()
+    return jsonify(events)
+
+
+def render_lineup_image(game_id):
+    """Render the lineup as a PNG image using Pillow. Returns bytes."""
+    conn = get_db()
+    c = conn.cursor()
+
+    c.execute('SELECT game_date, team_name, opponent_name FROM games WHERE id = ?', (game_id,))
+    game = c.fetchone()
+    if not game:
+        conn.close()
+        return None
+
+    # Get published lineup if available, otherwise current lineup
+    c.execute("PRAGMA table_info(games)")
+    cols = [row[1] for row in c.fetchall()]
+    is_published = False
+    if 'is_published' in cols:
+        c.execute('SELECT is_published FROM games WHERE id = ?', (game_id,))
+        is_published = bool(c.fetchone()['is_published'])
+
+    if is_published:
+        c.execute('''SELECT player_name, kicking_order FROM published_player_order 
+                    WHERE game_id = ? ORDER BY kicking_order, player_name''', (game_id,))
+        players = [row['player_name'] for row in c.fetchall()]
+        c.execute('SELECT inning, position, player_name FROM published_lineup WHERE game_id = ?', (game_id,))
+    else:
+        c.execute('''SELECT player_name, kicking_order FROM game_player_status 
+                    WHERE game_id = ? AND status = 'IN' ORDER BY kicking_order, player_name''', (game_id,))
+        players = [row['player_name'] for row in c.fetchall()]
+        c.execute('SELECT inning, position, player_name FROM lineup_positions WHERE game_id = ?', (game_id,))
+
+    lineup = {}
+    for row in c.fetchall():
+        inn = row['inning']
+        if inn not in lineup:
+            lineup[inn] = {}
+        lineup[inn][row['player_name']] = row['position']
+
+    conn.close()
+
+    if not players:
+        return None
+
+    # Image dimensions
+    try:
+        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 14)
+        font_sm = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 13)
+        font_hdr = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 18)
+    except (OSError, IOError):
+        font = ImageFont.load_default()
+        font_sm = font
+        font_hdr = font
+
+    col_widths = [30, 140] + [50] * 7  # #, Name, Inn1-7
+    row_height = 26
+    header_height = 50
+    padding = 10
+    table_width = sum(col_widths) + padding * 2
+    table_height = header_height + row_height + (len(players) * row_height) + padding * 2
+
+    img = Image.new('RGB', (table_width, table_height), '#1C2128')
+    draw = ImageDraw.Draw(img)
+
+    # Title
+    title = f"{game['team_name']} vs {game['opponent_name'] or 'TBD'}  —  {game['game_date']}"
+    draw.text((padding, padding), title, fill='#FFFFFF', font=font_hdr)
+
+    # Table header
+    y = header_height
+    x = padding
+    header_labels = ['#', 'Player'] + [f'Inn {i}' for i in range(1, 8)]
+    draw.rectangle([padding, y, table_width - padding, y + row_height], fill='#2C3E50')
+    for i, label in enumerate(header_labels):
+        draw.text((x + 4, y + 5), label, fill='#FFFFFF', font=font)
+        x += col_widths[i]
+
+    # Player rows
+    for idx, player in enumerate(players):
+        y = header_height + row_height + (idx * row_height)
+        bg = '#21262D' if idx % 2 == 0 else '#1C2128'
+        draw.rectangle([padding, y, table_width - padding, y + row_height], fill=bg)
+
+        x = padding
+        draw.text((x + 4, y + 5), str(idx + 1), fill='#8B949E', font=font_sm)
+        x += col_widths[0]
+        draw.text((x + 4, y + 5), player[:16], fill='#E6EDF3', font=font_sm)
+        x += col_widths[1]
+
+        for inn in range(1, 8):
+            pos = lineup.get(inn, {}).get(player, '-')
+            abbrev = POSITION_ABBREVIATIONS.get(pos, pos) if pos != '-' else '-'
+            color = '#95A5A6' if pos == 'Out' else '#27AE60' if pos != '-' else '#484F58'
+            draw.text((x + 4, y + 5), abbrev, fill=color, font=font_sm)
+            x += col_widths[2]
+
+    buf = io.BytesIO()
+    img.save(buf, format='PNG')
+    return buf.getvalue()
+
+
+@app.route('/api/games/<int:game_id>/lineup-image', methods=['GET'])
+@login_required
+def get_lineup_image(game_id):
+    """Generate and return the lineup as a PNG image."""
+    img_bytes = render_lineup_image(game_id)
+    if not img_bytes:
+        return jsonify({'error': 'No lineup to render'}), 404
+    return img_bytes, 200, {'Content-Type': 'image/png'}
+
+
+@app.route('/api/groupme/post-lineup-image/<int:game_id>', methods=['POST'])
+@login_required
+def post_lineup_image_to_groupme(game_id):
+    """Render the lineup as an image and post it to GroupMe."""
+    token = get_setting('groupme_access_token')
+    group_id = get_setting('groupme_group_id')
+    if not token or not group_id:
+        return jsonify({'error': 'GroupMe not configured'}), 400
+
+    img_bytes = render_lineup_image(game_id)
+    if not img_bytes:
+        return jsonify({'error': 'No lineup to render'}), 404
+
+    try:
+        image_url = gm.upload_image(token, img_bytes)
+        conn = get_db()
+        c = conn.cursor()
+        c.execute('SELECT game_date, opponent_name FROM games WHERE id = ?', (game_id,))
+        game = c.fetchone()
+        conn.close()
+
+        caption = f'Lineup: {game["game_date"]} vs {game["opponent_name"] or "TBD"}'
+        gm.post_image_message(token, group_id, caption, image_url)
+        return jsonify({'success': True, 'image_url': image_url})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 if __name__ == '__main__':

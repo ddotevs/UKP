@@ -21,7 +21,8 @@ const state = {
     positions: [],
     abbreviations: {},
     currentViewGameId: null,
-    selectedPlayer: null
+    selectedPlayer: null,
+    showAllInnings: false
 };
 
 // ========================================
@@ -165,6 +166,8 @@ function updateTabs() {
                     onclick="switchTab('roster')">Roster</button>
             <button class="tab-btn ${state.currentTab === 'viewLineup' ? 'active' : ''}" 
                     onclick="switchTab('viewLineup')">View Lineup</button>
+            <button class="tab-btn ${state.currentTab === 'settings' ? 'active' : ''}" 
+                    onclick="switchTab('settings')">Settings</button>
         `;
     } else {
         tabNav.innerHTML = `
@@ -186,10 +189,11 @@ function switchTab(tab) {
     document.getElementById('gameLineupPanel').style.display = tab === 'gameLineup' ? 'block' : 'none';
     document.getElementById('rosterPanel').style.display = tab === 'roster' ? 'block' : 'none';
     document.getElementById('viewLineupPanel').style.display = tab === 'viewLineup' ? 'block' : 'none';
+    document.getElementById('settingsPanel').style.display = tab === 'settings' ? 'block' : 'none';
     
     // Update active state properly
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-    const tabs = { gameLineup: 0, roster: 1, viewLineup: state.authenticated ? 2 : 0 };
+    const tabs = { gameLineup: 0, roster: 1, viewLineup: state.authenticated ? 2 : 0, settings: 3 };
     const activeIndex = tabs[tab];
     const buttons = document.querySelectorAll('.tab-btn');
     if (buttons[activeIndex]) {
@@ -209,6 +213,9 @@ async function loadCurrentTab() {
             break;
         case 'viewLineup':
             await loadViewLineup();
+            break;
+        case 'settings':
+            await loadSettings();
             break;
     }
 }
@@ -477,6 +484,9 @@ function renderGameLineup() {
                 ${publishStatusHtml}
                 <div class="publish-actions">
                     ${publishButtonHtml}
+                    <button class="btn btn-groupme" onclick="postToGroupMe(${state.currentGame.id})" title="Post event and message to GroupMe">
+                        Post to GroupMe
+                    </button>
                 </div>
             </div>
         </div>
@@ -547,11 +557,16 @@ function renderGameLineup() {
         
         <div class="card">
             <div class="lineup-header">
-                <h3 class="card-title">Lineup by Inning</h3>
+                <h3 class="card-title">${state.availablePlayers.length <= 11 && !state.showAllInnings ? 'Lineup' : 'Lineup by Inning'}</h3>
                 <div class="lineup-actions">
-                    <button class="btn btn-secondary btn-sm" onclick="copyInning()">
-                        Copy Inning 1 to All
-                    </button>
+                    ${state.availablePlayers.length <= 11
+                        ? `<button class="btn btn-ghost btn-sm" onclick="toggleAllInnings()">
+                               ${state.showAllInnings ? 'Collapse to 1 Inning' : 'Show All 7 Innings'}
+                           </button>`
+                        : `<button class="btn btn-secondary btn-sm" onclick="copyInning()">
+                               Copy Inning 1 to All
+                           </button>`
+                    }
                     <button class="btn btn-ghost btn-sm" onclick="resetLineup()">
                         Reset Lineup
                     </button>
@@ -563,6 +578,7 @@ function renderGameLineup() {
             </div>
         </div>
     `;
+    initSortable();
 }
 
 function buildLineupTable() {
@@ -573,55 +589,59 @@ function buildLineupTable() {
         </div>`;
     }
     
-    // Build header with inning warnings
+    const singleInning = state.availablePlayers.length <= 11 && !state.showAllInnings;
+    const innings = singleInning ? [1] : [1, 2, 3, 4, 5, 6, 7];
+    
+    // Build header
     let headerHtml = `
         <thead>
             <tr>
                 <th style="min-width: 180px;">Player</th>
-                <th style="width: 60px;">↑↓</th>
     `;
     
-    for (let i = 1; i <= 7; i++) {
-        const warnings = getInningWarnings(i);
-        const warningIcon = warnings.length > 0 
-            ? `<span class="inning-warning" title="${escapeHtml(warnings.join(' | '))}">⚠️</span>` 
-            : '';
-        headerHtml += `<th>Inn ${i} ${warningIcon}</th>`;
+    if (singleInning) {
+        headerHtml += `<th>Position</th>`;
+    } else {
+        for (const i of innings) {
+            const warnings = getInningWarnings(i);
+            const warningIcon = warnings.length > 0 
+                ? `<span class="inning-warning" title="${escapeHtml(warnings.join(' | '))}">⚠️</span>` 
+                : '';
+            headerHtml += `<th>Inn ${i} ${warningIcon}</th>`;
+        }
+        headerHtml += `<th>Out</th>`;
     }
     
-    headerHtml += `<th>Out</th></tr></thead>`;
+    headerHtml += `</tr></thead>`;
     
     // Build body
-    let bodyHtml = '<tbody>';
+    let bodyHtml = '<tbody id="lineupBody">';
     
     state.availablePlayers.forEach((player, index) => {
         const isFemale = state.genders[player] || false;
         const sitOutCount = state.sitOutCounts[player] || 0;
         
         bodyHtml += `
-            <tr>
+            <tr data-player="${escapeHtml(player)}">
                 <td>
                     <div class="player-name-cell">
+                        <span class="drag-handle" title="Drag to reorder">☰</span>
                         <span class="player-order">${index + 1}.</span>
                         <span class="player-name">${escapeHtml(player)}</span>
                         ${isFemale ? '<span class="gender-indicator">♀</span>' : ''}
                     </div>
                 </td>
-                <td>
-                    <div class="order-buttons">
-                        <button class="order-btn" onclick="movePlayer('${escapeHtml(player)}', 'up')" 
-                                ${index === 0 ? 'disabled' : ''}>↑</button>
-                        <button class="order-btn" onclick="movePlayer('${escapeHtml(player)}', 'down')" 
-                                ${index === state.availablePlayers.length - 1 ? 'disabled' : ''}>↓</button>
-                    </div>
-                </td>
         `;
         
-        for (let inning = 1; inning <= 7; inning++) {
+        for (const inning of innings) {
             const position = state.lineup[inning]?.[player] || '';
             const abbrev = position ? state.abbreviations[position] || position : '';
             const isOut = position === 'Out';
             const isDuplicate = checkDuplicatePosition(inning, position, player);
+            
+            const posOptions = singleInning
+                ? state.positions.filter(p => p !== 'Out')
+                : state.positions;
             
             bodyHtml += `
                 <td>
@@ -629,7 +649,7 @@ function buildLineupTable() {
                             onchange="updatePosition('${escapeHtml(player)}', ${inning}, this.value)"
                             ${isDuplicate ? `title="Duplicate position!"` : ''}>
                         <option value="">-</option>
-                        ${state.positions.map(pos => `
+                        ${posOptions.map(pos => `
                             <option value="${pos}" ${position === pos ? 'selected' : ''}>
                                 ${state.abbreviations[pos] || pos}
                             </option>
@@ -639,15 +659,54 @@ function buildLineupTable() {
             `;
         }
         
-        bodyHtml += `
+        if (!singleInning) {
+            bodyHtml += `
                 <td class="${sitOutCount > 0 ? 'sit-out-count' : 'sit-out-count zero'}">${sitOutCount}</td>
-            </tr>
-        `;
+            `;
+        }
+        
+        bodyHtml += `</tr>`;
     });
     
     bodyHtml += '</tbody>';
     
     return `<table class="lineup-table">${headerHtml}${bodyHtml}</table>`;
+}
+
+function initSortable() {
+    const tbody = document.getElementById('lineupBody');
+    if (!tbody || !window.Sortable) return;
+    
+    Sortable.create(tbody, {
+        handle: '.drag-handle',
+        animation: 150,
+        ghostClass: 'sortable-ghost',
+        chosenClass: 'sortable-chosen',
+        dragClass: 'sortable-drag',
+        onEnd: async function() {
+            const rows = tbody.querySelectorAll('tr[data-player]');
+            const newOrder = Array.from(rows).map(row => row.dataset.player);
+            
+            // Update local state immediately for snappy feel
+            state.availablePlayers = newOrder;
+            
+            // Update row numbers
+            rows.forEach((row, idx) => {
+                const orderSpan = row.querySelector('.player-order');
+                if (orderSpan) orderSpan.textContent = `${idx + 1}.`;
+            });
+            
+            // Persist to backend
+            try {
+                await api(`/api/games/${state.currentGame.id}/reorder`, {
+                    method: 'PUT',
+                    body: JSON.stringify({ order: newOrder })
+                });
+            } catch (error) {
+                console.error('Failed to save order:', error);
+            }
+        }
+    });
 }
 
 function getInningWarnings(inning) {
@@ -755,6 +814,7 @@ function updateLineupTable() {
     
     // Restore page scroll position
     window.scrollTo(0, scrollY);
+    initSortable();
 }
 
 async function updateGameDetails() {
@@ -821,6 +881,19 @@ async function updatePosition(player, inning, position) {
             state.sitOutCounts[player] = (state.sitOutCounts[player] || 0) + 1;
         }
         
+        // Auto-fill: if <=11 players and editing inning 1, copy to all innings
+        if (inning === 1 && state.availablePlayers.length <= 11) {
+            const inning1Positions = state.lineup[1] || {};
+            const filledCount = Object.values(inning1Positions).filter(p => p && p !== '').length;
+            // Only auto-copy once all players in inning 1 have assignments
+            if (filledCount === state.availablePlayers.length) {
+                await api(`/api/games/${state.currentGame.id}/lineup/copy`, { method: 'POST' });
+                const lineupData = await api(`/api/games/${state.currentGame.id}/lineup`);
+                state.lineup = lineupData.lineup;
+                state.sitOutCounts = lineupData.sitOutCounts;
+            }
+        }
+        
         // Re-render just the lineup table to update warnings and counts
         updateLineupTable();
     } catch (error) {
@@ -828,25 +901,9 @@ async function updatePosition(player, inning, position) {
     }
 }
 
-async function movePlayer(player, direction) {
-    try {
-        await api(`/api/games/${state.currentGame.id}/order/${encodeURIComponent(player)}`, {
-            method: 'PUT',
-            body: JSON.stringify({ direction })
-        });
-        
-        // Reload just the lineup data (not the entire page)
-        const lineupData = await api(`/api/games/${state.currentGame.id}/lineup`);
-        state.availablePlayers = lineupData.availablePlayers;
-        state.genders = lineupData.genders;
-        state.lineup = lineupData.lineup;
-        state.sitOutCounts = lineupData.sitOutCounts;
-        
-        // Re-render just the lineup table
-        updateLineupTable();
-    } catch (error) {
-        console.error('Failed to move player:', error);
-    }
+function toggleAllInnings() {
+    state.showAllInnings = !state.showAllInnings;
+    renderGameLineup();
 }
 
 async function copyInning() {
@@ -944,6 +1001,13 @@ async function publishLineup() {
         state.currentGame.is_published = true;
         state.currentGame.published_at = new Date().toISOString();
         
+        // Post lineup image to GroupMe (non-blocking, don't fail publish if this fails)
+        try {
+            await api(`/api/groupme/post-lineup-image/${state.currentGame.id}`, { method: 'POST' });
+        } catch (gmErr) {
+            console.warn('GroupMe image post failed (lineup still published):', gmErr.message);
+        }
+        
         // Re-render to show updated status
         renderGameLineup();
     } catch (error) {
@@ -1023,8 +1087,14 @@ function renderRoster(roster, substitutes, users = []) {
             <div class="roster-item-name">
                 <span>${escapeHtml(player.name)}</span>
                 ${player.isFemale ? '<span class="gender-indicator">♀</span>' : ''}
+                ${player.groupmeUserId ? '<span class="groupme-linked" title="GroupMe linked">GM</span>' : ''}
             </div>
             <div class="roster-item-actions">
+                <button class="btn btn-ghost btn-sm groupme-link-btn" 
+                        onclick="promptGroupMeId('${escapeHtml(player.name)}', '${escapeHtml(player.groupmeUserId || '')}')"
+                        title="${player.groupmeUserId ? 'Edit GroupMe ID' : 'Link GroupMe'}">
+                    ${player.groupmeUserId ? 'GM ✓' : 'GM'}
+                </button>
                 <button class="gender-btn ${player.isFemale ? 'female' : 'male'}" 
                         onclick="toggleRosterGender('${escapeHtml(player.name)}')"
                         title="Toggle gender">
@@ -1043,8 +1113,14 @@ function renderRoster(roster, substitutes, users = []) {
             <div class="roster-item-name">
                 <span>${escapeHtml(player.name)}</span>
                 ${player.isFemale ? '<span class="gender-indicator">♀</span>' : ''}
+                ${player.groupmeUserId ? '<span class="groupme-linked" title="GroupMe linked">GM</span>' : ''}
             </div>
             <div class="roster-item-actions">
+                <button class="btn btn-ghost btn-sm groupme-link-btn" 
+                        onclick="promptGroupMeId('${escapeHtml(player.name)}', '${escapeHtml(player.groupmeUserId || '')}')"
+                        title="${player.groupmeUserId ? 'Edit GroupMe ID' : 'Link GroupMe'}">
+                    ${player.groupmeUserId ? 'GM ✓' : 'GM'}
+                </button>
                 <button class="gender-btn ${player.isFemale ? 'female' : 'male'}" 
                         onclick="toggleSubGender('${escapeHtml(player.name)}')"
                         title="Toggle gender">
@@ -1506,7 +1582,12 @@ async function renderViewLineup(gameId, selectedPlayer = null) {
                 <h2>${escapeHtml(game.team_name)} vs ${escapeHtml(game.opponent_name || 'TBD')}</h2>
                 <p class="game-date">📅 ${game.game_date}</p>
             </div>
-            ${logoHtml}
+            <div class="view-header-actions">
+                ${logoHtml}
+                ${lineupData.published && lineupData.availablePlayers.length > 0 
+                    ? '<button class="btn btn-secondary btn-sm" onclick="printLineup()">Print Lineup</button>' 
+                    : ''}
+            </div>
         </div>
         
         ${unpublishedBanner}
@@ -1564,6 +1645,243 @@ function escapeHtml(text) {
 }
 
 // ========================================
+// Print Functions
+// ========================================
+function printLineup() {
+    const ld = state.currentViewLineup;
+    const game = state.games.find(g => g.id === state.currentViewGameId);
+    if (!ld || !game) return;
+    
+    let tableHtml = '<table><thead><tr><th>#</th><th>Player</th>';
+    for (let i = 1; i <= 7; i++) tableHtml += `<th>Inn ${i}</th>`;
+    tableHtml += '</tr></thead><tbody>';
+    
+    ld.availablePlayers.forEach((player, idx) => {
+        const isFemale = ld.genders[player];
+        tableHtml += `<tr><td>${idx + 1}</td><td>${player}${isFemale ? ' ♀' : ''}</td>`;
+        for (let inn = 1; inn <= 7; inn++) {
+            const pos = ld.lineup[inn]?.[player] || '-';
+            const abbr = pos !== '-' ? (ld.abbreviations[pos] || pos) : '-';
+            tableHtml += `<td class="${pos === 'Out' ? 'out' : ''}">${abbr}</td>`;
+        }
+        tableHtml += '</tr>';
+    });
+    tableHtml += '</tbody></table>';
+    
+    const logoSrc = game.team_logo ? `/logos/${game.team_logo}` : '';
+    const logoTag = logoSrc ? `<img src="${logoSrc}" class="print-logo">` : '';
+    
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(`<!DOCTYPE html><html><head><title>Lineup - ${game.team_name} vs ${game.opponent_name || 'TBD'}</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 20px; color: #000; }
+  .header { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; }
+  .print-logo { height: 60px; }
+  h1 { font-size: 22px; margin: 0; }
+  .date { color: #666; margin: 4px 0 0; font-size: 14px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { border: 1px solid #ccc; padding: 6px 10px; text-align: center; }
+  th { background: #222; color: #fff; }
+  td:nth-child(2) { text-align: left; }
+  .out { background: #f0f0f0; color: #999; }
+  @media print { body { padding: 0; } }
+</style></head><body>
+<div class="header">${logoTag}<div><h1>${game.team_name} vs ${game.opponent_name || 'TBD'}</h1><p class="date">${game.game_date}</p></div></div>
+${tableHtml}
+<script>window.print();</script>
+</body></html>`);
+    printWindow.document.close();
+}
+
+// ========================================
+// GroupMe Functions
+// ========================================
+async function postToGroupMe(gameId) {
+    if (!confirm('Post this game as an event and message to GroupMe?')) return;
+    
+    try {
+        const result = await api(`/api/groupme/post-event/${gameId}`, { method: 'POST' });
+        const msgs = [];
+        if (result.results.event) msgs.push(`Event: ${result.results.event}`);
+        if (result.results.message) msgs.push(`Message: ${result.results.message}`);
+        alert('GroupMe Results:\n' + msgs.join('\n'));
+    } catch (error) {
+        alert('GroupMe error: ' + error.message);
+    }
+}
+
+async function promptGroupMeId(playerName, currentId) {
+    try {
+        // Try to fetch GroupMe members for a dropdown
+        const members = await api('/api/groupme/members');
+        showGroupMeModal(playerName, currentId, members);
+    } catch {
+        // Fallback to manual entry if GroupMe not configured
+        const newId = prompt(`GroupMe User ID for ${playerName}:`, currentId || '');
+        if (newId === null) return;
+        await saveGroupMeId(playerName, newId);
+    }
+}
+
+function showGroupMeModal(playerName, currentId, members) {
+    // Remove existing modal if any
+    const existing = document.getElementById('groupmeModal');
+    if (existing) existing.remove();
+    
+    const memberOptions = members.map(m => 
+        `<option value="${m.user_id}" ${m.user_id === currentId ? 'selected' : ''}>${escapeHtml(m.nickname)}</option>`
+    ).join('');
+    
+    const modal = document.createElement('div');
+    modal.id = 'groupmeModal';
+    modal.className = 'modal-overlay';
+    modal.innerHTML = `
+        <div class="modal">
+            <div class="modal-header">
+                <h2>Link GroupMe - ${escapeHtml(playerName)}</h2>
+                <button class="modal-close" onclick="document.getElementById('groupmeModal').remove()">&times;</button>
+            </div>
+            <div class="modal-form">
+                <div class="form-group">
+                    <label>Select GroupMe Member</label>
+                    <select id="gmMemberSelect" class="form-select">
+                        <option value="">-- None --</option>
+                        ${memberOptions}
+                    </select>
+                </div>
+                <button class="btn btn-primary btn-full" onclick="saveGroupMeFromModal('${escapeHtml(playerName)}')">Save</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+    modal.style.display = 'flex';
+    
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) modal.remove();
+    });
+}
+
+async function saveGroupMeFromModal(playerName) {
+    const select = document.getElementById('gmMemberSelect');
+    const userId = select.value;
+    document.getElementById('groupmeModal').remove();
+    await saveGroupMeId(playerName, userId);
+}
+
+async function saveGroupMeId(playerName, userId) {
+    try {
+        await api(`/api/roster/${encodeURIComponent(playerName)}/groupme`, {
+            method: 'PUT',
+            body: JSON.stringify({ groupmeUserId: userId })
+        });
+        await refreshRosterData();
+    } catch (error) {
+        alert('Failed to save GroupMe ID: ' + error.message);
+    }
+}
+
+// ========================================
+// Settings Functions
+// ========================================
+async function loadSettings() {
+    if (!state.authenticated) return;
+    
+    const panel = document.getElementById('settingsPanel');
+    panel.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    
+    try {
+        const settings = await api('/api/settings');
+        renderSettings(settings);
+    } catch (error) {
+        console.error('Failed to load settings:', error);
+        panel.innerHTML = `<div class="empty-state"><div class="empty-state-icon">⚠️</div><p>Failed to load settings</p></div>`;
+    }
+}
+
+function renderSettings(settings) {
+    const panel = document.getElementById('settingsPanel');
+    
+    const tokenDisplay = settings.groupme_access_token 
+        ? settings.groupme_access_token.substring(0, 8) + '...' 
+        : '';
+    
+    panel.innerHTML = `
+        <div class="card roster-section">
+            <div class="card-header">
+                <h3 class="card-title">GroupMe Configuration</h3>
+            </div>
+            <form class="settings-form" onsubmit="saveSettings(event)" style="padding: 0 var(--space-lg) var(--space-lg);">
+                <div class="form-group">
+                    <label>Access Token</label>
+                    <input type="password" class="form-input" id="settingsGmToken" 
+                           value="${escapeHtml(settings.groupme_access_token)}" 
+                           placeholder="Your GroupMe access token">
+                    <small class="text-muted">${tokenDisplay ? 'Currently set: ' + tokenDisplay : 'Not configured'}</small>
+                </div>
+                <div class="form-group">
+                    <label>Group ID</label>
+                    <input type="text" class="form-input" id="settingsGmGroupId" 
+                           value="${escapeHtml(settings.groupme_group_id)}" 
+                           placeholder="e.g. 117264419">
+                </div>
+                <div class="form-row" style="gap: var(--space-md); margin-top: var(--space-md);">
+                    <button type="submit" class="btn btn-primary">Save Settings</button>
+                    <button type="button" class="btn btn-secondary" onclick="testGroupMe()">Test Connection</button>
+                </div>
+            </form>
+        </div>
+        
+        <div class="card roster-section">
+            <div class="card-header">
+                <h3 class="card-title">GroupMe Members</h3>
+            </div>
+            <div id="gmMembersList" style="padding: 0 var(--space-lg) var(--space-lg);">
+                <p class="text-muted">Click "Test Connection" above to load group members</p>
+            </div>
+        </div>
+    `;
+}
+
+async function saveSettings(event) {
+    event.preventDefault();
+    
+    const token = document.getElementById('settingsGmToken').value.trim();
+    const groupId = document.getElementById('settingsGmGroupId').value.trim();
+    
+    try {
+        await api('/api/settings', {
+            method: 'POST',
+            body: JSON.stringify({
+                groupme_access_token: token,
+                groupme_group_id: groupId,
+            })
+        });
+        alert('Settings saved.');
+    } catch (error) {
+        alert('Failed to save: ' + error.message);
+    }
+}
+
+async function testGroupMe() {
+    const membersList = document.getElementById('gmMembersList');
+    membersList.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    
+    try {
+        const members = await api('/api/groupme/members');
+        membersList.innerHTML = members.map(m => `
+            <div class="roster-item">
+                <div class="roster-item-name">
+                    <span>${escapeHtml(m.nickname)}</span>
+                    <span class="text-muted" style="font-size: 0.85em;">${m.user_id}</span>
+                </div>
+            </div>
+        `).join('');
+    } catch (error) {
+        membersList.innerHTML = `<p style="color: var(--color-danger);">Connection failed: ${escapeHtml(error.message)}</p>`;
+    }
+}
+
+// ========================================
 // Event Listeners
 // ========================================
 document.addEventListener('DOMContentLoaded', async () => {
@@ -1575,6 +1893,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('gameLineupPanel').style.display = state.currentTab === 'gameLineup' ? 'block' : 'none';
     document.getElementById('rosterPanel').style.display = state.currentTab === 'roster' ? 'block' : 'none';
     document.getElementById('viewLineupPanel').style.display = state.currentTab === 'viewLineup' ? 'block' : 'none';
+    document.getElementById('settingsPanel').style.display = state.currentTab === 'settings' ? 'block' : 'none';
     
     await loadCurrentTab();
     
