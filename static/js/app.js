@@ -557,9 +557,9 @@ function renderGameLineup() {
         
         <div class="card">
             <div class="lineup-header">
-                <h3 class="card-title">${state.availablePlayers.length <= 11 && !state.showAllInnings ? 'Lineup' : 'Lineup by Inning'}</h3>
+                <h3 class="card-title">${canCollapseSingleInning() && !state.showAllInnings ? 'Lineup' : 'Lineup by Inning'}</h3>
                 <div class="lineup-actions">
-                    ${state.availablePlayers.length <= 11
+                    ${canCollapseSingleInning()
                         ? `<button class="btn btn-ghost btn-sm" onclick="toggleAllInnings()">
                                ${state.showAllInnings ? 'Collapse to 1 Inning' : 'Show All 7 Innings'}
                            </button>`
@@ -581,6 +581,12 @@ function renderGameLineup() {
     initSortable();
 }
 
+function canCollapseSingleInning() {
+    if (state.availablePlayers.length > 11) return false;
+    const femaleCount = state.availablePlayers.filter(p => state.genders[p]).length;
+    return femaleCount >= 4;
+}
+
 function buildLineupTable() {
     if (state.availablePlayers.length === 0) {
         return `<div class="empty-state">
@@ -589,7 +595,7 @@ function buildLineupTable() {
         </div>`;
     }
     
-    const singleInning = state.availablePlayers.length <= 11 && !state.showAllInnings;
+    const singleInning = canCollapseSingleInning() && !state.showAllInnings;
     const innings = singleInning ? [1] : [1, 2, 3, 4, 5, 6, 7];
     
     // Build header
@@ -881,8 +887,8 @@ async function updatePosition(player, inning, position) {
             state.sitOutCounts[player] = (state.sitOutCounts[player] || 0) + 1;
         }
         
-        // Auto-fill: if <=11 players and editing inning 1, copy to all innings
-        if (inning === 1 && state.availablePlayers.length <= 11) {
+        // Auto-fill: if collapsible (<=11, >=4 female) and editing inning 1, copy to all innings
+        if (inning === 1 && canCollapseSingleInning()) {
             const inning1Positions = state.lineup[1] || {};
             const filledCount = Object.values(inning1Positions).filter(p => p && p !== '').length;
             // Only auto-copy once all players in inning 1 have assignments
@@ -1824,11 +1830,32 @@ function renderSettings(settings) {
                            value="${escapeHtml(settings.groupme_group_id)}" 
                            placeholder="e.g. 117264419">
                 </div>
+                <div class="form-group">
+                    <label>Bot ID</label>
+                    <input type="text" class="form-input" id="settingsGmBotId" 
+                           value="${escapeHtml(settings.groupme_bot_id)}" 
+                           placeholder="Your GroupMe bot ID">
+                    <small class="text-muted">Create a bot at dev.groupme.com for this group</small>
+                </div>
                 <div class="form-row" style="gap: var(--space-md); margin-top: var(--space-md);">
                     <button type="submit" class="btn btn-primary">Save Settings</button>
                     <button type="button" class="btn btn-secondary" onclick="testGroupMe()">Test Connection</button>
                 </div>
             </form>
+        </div>
+        
+        <div class="card roster-section">
+            <div class="card-header">
+                <h3 class="card-title">Send Bot Message</h3>
+            </div>
+            <div style="padding: 0 var(--space-lg) var(--space-lg);">
+                <div class="form-group">
+                    <label>Message</label>
+                    <textarea class="form-input" id="botMessageText" rows="3" placeholder="Type a message to post as the bot..."></textarea>
+                </div>
+                <button class="btn btn-groupme" onclick="sendBotMessage()">Send as Bot</button>
+                <div id="botMessageStatus" style="margin-top: var(--space-sm);"></div>
+            </div>
         </div>
         
         <div class="card roster-section">
@@ -1847,6 +1874,7 @@ async function saveSettings(event) {
     
     const token = document.getElementById('settingsGmToken').value.trim();
     const groupId = document.getElementById('settingsGmGroupId').value.trim();
+    const botId = document.getElementById('settingsGmBotId').value.trim();
     
     try {
         await api('/api/settings', {
@@ -1854,11 +1882,32 @@ async function saveSettings(event) {
             body: JSON.stringify({
                 groupme_access_token: token,
                 groupme_group_id: groupId,
+                groupme_bot_id: botId,
             })
         });
         alert('Settings saved.');
     } catch (error) {
         alert('Failed to save: ' + error.message);
+    }
+}
+
+async function sendBotMessage() {
+    const textarea = document.getElementById('botMessageText');
+    const status = document.getElementById('botMessageStatus');
+    const text = textarea.value.trim();
+    if (!text) return;
+    
+    status.innerHTML = '<span class="text-muted">Sending...</span>';
+    try {
+        await api('/api/groupme/bot-message', {
+            method: 'POST',
+            body: JSON.stringify({ text })
+        });
+        status.innerHTML = '<span style="color: var(--accent-green);">Sent!</span>';
+        textarea.value = '';
+        setTimeout(() => { status.innerHTML = ''; }, 3000);
+    } catch (error) {
+        status.innerHTML = `<span style="color: var(--danger);">${escapeHtml(error.message)}</span>`;
     }
 }
 

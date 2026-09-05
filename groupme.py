@@ -210,3 +210,14 @@ def pin_message(token, conversation_id, message_id):
     )
     resp.raise_for_status()
     return resp.json()
+
+
+def post_bot_message(bot_id, text):
+    """Post a message as a GroupMe bot."""
+    payload = {
+        'bot_id': bot_id,
+        'text': text,
+    }
+    resp = requests.post(f'{BASE_URL}/bots/post', json=payload)
+    resp.raise_for_status()
+    return resp.status_code

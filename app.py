@@ -1169,6 +1169,7 @@ def get_settings():
     return jsonify({
         'groupme_access_token': get_setting('groupme_access_token', ''),
         'groupme_group_id': get_setting('groupme_group_id', ''),
+        'groupme_bot_id': get_setting('groupme_bot_id', ''),
     })
 
 
@@ -1176,7 +1177,7 @@ def get_settings():
 @login_required
 def update_settings():
     data = request.json
-    for key in ('groupme_access_token', 'groupme_group_id'):
+    for key in ('groupme_access_token', 'groupme_group_id', 'groupme_bot_id'):
         if key in data:
             set_setting(key, data[key].strip())
     return jsonify({'success': True})
@@ -1209,6 +1210,23 @@ def groupme_members():
     try:
         members = gm.get_group_members(token, group_id)
         return jsonify(members)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/groupme/bot-message', methods=['POST'])
+@login_required
+def send_bot_message():
+    bot_id = get_setting('groupme_bot_id')
+    if not bot_id:
+        return jsonify({'error': 'Bot ID not configured. Set it in Settings.'}), 400
+    data = request.json
+    text = data.get('text', '').strip()
+    if not text:
+        return jsonify({'error': 'Message text required'}), 400
+    try:
+        gm.post_bot_message(bot_id, text)
+        return jsonify({'success': True})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
