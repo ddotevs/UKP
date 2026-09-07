@@ -460,12 +460,19 @@ def handle_message(data):
     if not text:
         return None
 
-    # Check if the bot was mentioned by name
-    bot_name = get_setting('groupme_bot_name', 'UKP Bot')
-    mentioned = bot_name.lower() in text.lower()
+    # Check if the bot was mentioned by any known name
+    bot_name = get_setting('groupme_bot_name', 'AI.Drew')
+    bot_names = [bot_name, 'UKP Bot', 'AI.Drew']
+    # Deduplicate and lowercase for matching
+    bot_names_lower = list(set(n.lower() for n in bot_names))
 
-    # Strip the bot name from the text for command matching
-    clean_text = re.sub(re.escape(bot_name), '', text, flags=re.IGNORECASE).strip()
+    mentioned = any(name in text.lower() for name in bot_names_lower)
+
+    # Strip all bot names from the text for command matching
+    clean_text = text
+    for name in sorted(bot_names, key=len, reverse=True):
+        clean_text = re.sub(re.escape(name), '', clean_text, flags=re.IGNORECASE)
+    clean_text = clean_text.strip()
     # Also strip leading @, punctuation
     clean_text = re.sub(r'^[@,\s]+', '', clean_text).strip()
 
