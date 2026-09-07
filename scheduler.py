@@ -52,17 +52,19 @@ def get_gm_map():
 
 
 def ensure_next_game_exists():
-    """Create the next game in the DB from the stored schedule if it doesn't exist yet."""
+    """Create this week's game in the DB from the stored schedule if it doesn't exist yet."""
     schedule_json = get_setting('fall_26_schedule')
     if not schedule_json:
         return
     schedule = json.loads(schedule_json)
-    today = datetime.now(TZ).strftime('%Y-%m-%d')
+    today = datetime.now(TZ)
+    week_end = (today + timedelta(days=7)).strftime('%Y-%m-%d')
+    today_str = today.strftime('%Y-%m-%d')
     conn = get_db()
     c = conn.cursor()
     for entry in schedule:
         game_date = entry['date']
-        if game_date < today:
+        if game_date < today_str or game_date > week_end:
             continue
         # Check if this game already exists
         c.execute('SELECT id FROM games WHERE game_date = ?', (game_date,))
@@ -73,23 +75,26 @@ def ensure_next_game_exists():
                   (game_date, 'Unsolicited Kick Pics', entry['opponent'], entry['time']))
         conn.commit()
         print(f'Created game: {game_date} vs {entry["opponent"]} at {entry["time"]}')
-        break  # Only create the next one
+        break
     conn.close()
 
 
 def find_next_game():
-    """Find the next upcoming game that hasn't been posted to GroupMe yet."""
+    """Find this week's game that hasn't been posted to GroupMe yet.
+    Only looks at games within the next 7 days to avoid posting early.
+    """
     conn = get_db()
     c = conn.cursor()
     today = datetime.now(TZ).strftime('%Y-%m-%d')
+    week_end = (datetime.now(TZ) + timedelta(days=7)).strftime('%Y-%m-%d')
     c.execute('''
         SELECT g.id, g.game_date, g.opponent_name, g.game_time 
         FROM games g
-        WHERE g.game_date >= ?
+        WHERE g.game_date >= ? AND g.game_date <= ?
         AND g.id NOT IN (SELECT game_id FROM groupme_events WHERE event_type = 'event')
         ORDER BY g.game_date ASC
         LIMIT 1
-    ''', (today,))
+    ''', (today, week_end))
     game = c.fetchone()
     conn.close()
     return game
