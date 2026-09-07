@@ -309,7 +309,13 @@ def reminder_post():
 
     # Post reminder
     try:
-        text, mentions = gm.build_reminder_message(non_responders, gm_map)
+        # Build event link
+        event_url = None
+        if gm_event_id:
+            share_token = get_setting('groupme_share_token', '')
+            if share_token:
+                event_url = f'https://groupme.com/join_event/{group_id}/{gm_event_id}/{share_token}'
+        text, mentions = gm.build_reminder_message(non_responders, gm_map, event_url=event_url)
         gm.post_message(token, group_id, text, mentions)
         print(f'Reminder sent, tagged {len(non_responders)} non-responders')
     except Exception as e:

@@ -149,14 +149,18 @@ def build_game_message(game_date, opponent, all_roster_names, groupme_user_map, 
     return text_so_far.rstrip(), mentions
 
 
-def build_reminder_message(non_responders, groupme_user_map):
+def build_reminder_message(non_responders, groupme_user_map, event_url=None):
     """Build a reminder message tagging players who haven't responded to the event.
     
     non_responders: list of player names who haven't responded
     groupme_user_map: dict of player_name -> groupme_user_id
+    event_url: optional link to the GroupMe event
     Returns (text, mentions) tuple.
     """
-    text_so_far = 'Reminder: Please respond to the game event!\n\n'
+    text_so_far = 'Reminder: Please respond to the game event!\n'
+    if event_url:
+        text_so_far += f'{event_url}\n'
+    text_so_far += '\n'
     mentions = []
     
     for player in sorted(non_responders):
