@@ -216,7 +216,7 @@ def cmd_sub_needed(text):
     if not sub_group_id:
         return "Sub group not configured. Set 'groupme_sub_group_id' in settings."
     date = datetime.strptime(game['game_date'], '%Y-%m-%d')
-    game_time = get_setting('default_game_time', '7:00 PM')
+    game_time = game['game_time'] or get_setting('default_game_time', '7:00 PM')
     park = get_setting('park_name', 'the field')
     msg = f"SUB NEEDED!\n\nWe need a sub for {date.strftime('%A, %B %-d')} at {game_time} @ {park}.\n\nReply here or DM if you can make it!"
     # Post to the sub group using the access token (bot can't post to other groups)

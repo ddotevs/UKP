@@ -216,9 +216,30 @@ def monday_post():
 
     # Create calendar event
     try:
-        event_name = f'Kickball vs. {opponent}' if opponent else 'Kickball Game'
-        start_at = f'{game_date}T19:00:00-04:00'
-        event_resp = gm.create_event(token, group_id, event_name, start_at=start_at)
+        import re as _re
+        hour, minute = 19, 0
+        if game_time:
+            m = _re.match(r'(\d+):(\d+)\s*(AM|PM)', game_time, _re.IGNORECASE)
+            if m:
+                hour = int(m.group(1))
+                minute = int(m.group(2))
+                if m.group(3).upper() == 'PM' and hour != 12:
+                    hour += 12
+        start_at = f'{game_date}T{hour:02d}:{minute:02d}:00-04:00'
+        end_at = f'{game_date}T{hour+1:02d}:{minute:02d}:00-04:00'
+
+        # Game number from schedule
+        schedule_json = get_setting('fall_26_schedule')
+        game_num = ''
+        if schedule_json:
+            schedule = json.loads(schedule_json)
+            for i, entry in enumerate(schedule):
+                if entry['date'] == game_date:
+                    game_num = f'Game {i+1} - '
+                    break
+
+        event_name = f'{game_num}{opponent}' if opponent else 'Kickball Game'
+        event_resp = gm.create_event(token, group_id, event_name, start_at=start_at, end_at=end_at)
         resp_data = event_resp.get('response', {})
         if isinstance(resp_data, dict):
             gm_event_id = resp_data.get('event', {}).get('event_id') or resp_data.get('event_id')

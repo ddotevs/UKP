@@ -52,19 +52,25 @@ def post_message(token, group_id, text, mentions=None):
     return resp.json()
 
 
-def create_event(token, conversation_id, name, description=None, start_at=None):
+def create_event(token, conversation_id, name, description=None, start_at=None, end_at=None):
     """Create a calendar event in a GroupMe group.
     
-    start_at: ISO 8601 datetime string
+    start_at: ISO 8601 datetime string (e.g., '2026-09-10T19:15:00-04:00')
+    end_at: ISO 8601 datetime string for event end
     Returns the event response including the event_id.
     """
     payload = {
         'name': name,
+        'is_all_day': False,
+        'timezone': 'America/New_York',
     }
     if description:
         payload['description'] = description
     if start_at:
         payload['start_at'] = start_at
+    if end_at:
+        payload['end_at'] = end_at
+        payload['end_at_set'] = True
     
     resp = requests.post(
         f'{BASE_URL}/conversations/{conversation_id}/events/create',
@@ -93,15 +99,12 @@ def get_event_respondents(token, conversation_id, event_id):
         data = get_event(token, conversation_id, event_id)
         event = data.get('response', {}).get('event', {})
         result = {'going': set(), 'not_going': set(), 'maybe': set()}
-        for user in event.get('going', []):
-            uid = str(user.get('user_id', user) if isinstance(user, dict) else user)
-            result['going'].add(uid)
-        for user in event.get('not_going', []):
-            uid = str(user.get('user_id', user) if isinstance(user, dict) else user)
-            result['not_going'].add(uid)
-        for user in event.get('maybe', []):
-            uid = str(user.get('user_id', user) if isinstance(user, dict) else user)
-            result['maybe'].add(uid)
+        for uid in event.get('going', []):
+            result['going'].add(str(uid))
+        for uid in event.get('not_going', []):
+            result['not_going'].add(str(uid))
+        for uid in event.get('maybe_going', []):
+            result['maybe'].add(str(uid))
         return result
     except Exception:
         return {'going': set(), 'not_going': set(), 'maybe': set()}
