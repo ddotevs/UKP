@@ -1666,8 +1666,8 @@ function escapeHtml(text) {
 // ========================================
 // Player Profile Functions
 // ========================================
-const ABILITY_LABELS = {0: '-', 1: 'Pinch', 2: 'Good', 3: 'Primary'};
-const ABILITY_CLASSES = {0: '', 1: 'ability-pinch', 2: 'ability-good', 3: 'ability-primary'};
+const ABILITY_LABELS = {'-1': 'Never', 0: '-', 1: 'Pinch', 2: 'Good', 3: 'Primary'};
+const ABILITY_CLASSES = {'-1': 'ability-never', 0: '', 1: 'ability-pinch', 2: 'ability-good', 3: 'ability-primary'};
 const ROLE_LABELS = {
     leadoff: 'Leadoff', table_setter: 'Table Setter', contact: 'Contact',
     power: 'Power', middle: 'Middle', back: 'Back', unknown: 'Unknown'
@@ -1717,8 +1717,8 @@ function renderPlayerProfiles(data, container) {
         // Position ability selectors
         for (const pos of fieldPositions) {
             const ability = (player.positions && player.positions[pos]) || 0;
-            html += `<td><select class="ability-select ${ABILITY_CLASSES[ability]}" data-player="${esc}" data-pos="${pos}" onchange="updateAbilityColor(this); savePlayerProfile('${esc}')">`;
-            for (let a = 0; a <= 3; a++) {
+            html += `<td><select class="ability-select ${ABILITY_CLASSES[ability] || ''}" data-player="${esc}" data-pos="${pos}" onchange="updateAbilityColor(this); savePlayerProfile('${esc}')">`;
+            for (let a = -1; a <= 3; a++) {
                 html += `<option value="${a}" ${ability === a ? 'selected' : ''}>${ABILITY_LABELS[a]}</option>`;
             }
             html += `</select></td>`;

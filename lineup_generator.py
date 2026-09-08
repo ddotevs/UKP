@@ -175,7 +175,6 @@ def assign_positions(players_on_field, abilities, prev_inning=None):
         primary = [pos for pos, ab in player_abilities.items() if ab == 3 and pos in available_positions]
         if primary:
             pos = primary[0]
-            # If previous inning had them here, prefer consistency
             if prev_inning and prev_inning.get(name) in primary:
                 pos = prev_inning[name]
             assignments[name] = pos
@@ -206,10 +205,19 @@ def assign_positions(players_on_field, abilities, prev_inning=None):
             available_positions.remove(pinch[0])
             unassigned.remove(player)
 
-    # Phase 4: Fill remaining (no ability data = assign whatever's left)
+    # Phase 4: Fill remaining (no ability data = assign whatever's left, but respect "never")
     for player in list(unassigned):
-        if available_positions:
-            assignments[player['name']] = available_positions.pop(0)
+        name = player['name']
+        player_abilities = abilities.get(name, {})
+        never_positions = {pos for pos, ab in player_abilities.items() if ab == -1}
+        allowed = [pos for pos in available_positions if pos not in never_positions]
+        if allowed:
+            assignments[name] = allowed[0]
+            available_positions.remove(allowed[0])
+            unassigned.remove(player)
+        elif available_positions:
+            # Last resort: even if marked never, fill the slot
+            assignments[name] = available_positions.pop(0)
             unassigned.remove(player)
 
     return assignments
