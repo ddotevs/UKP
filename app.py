@@ -13,6 +13,7 @@ from werkzeug.utils import secure_filename
 import groupme as gm
 from PIL import Image, ImageDraw, ImageFont
 import chatbot
+import lineup_generator
 
 app = Flask(__name__, static_folder='static', static_url_path='/static')
 app.secret_key = os.environ.get('SECRET_KEY', 'ukp-kickball-secret-key-change-in-production')
@@ -171,6 +172,27 @@ def init_db():
             groupme_response TEXT,
             posted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (game_id) REFERENCES games(id)
+        )
+    ''')
+    
+    # Player position abilities (0=can't, 1=pinch, 2=comfortable, 3=primary)
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS player_positions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            player_name TEXT NOT NULL,
+            position TEXT NOT NULL,
+            ability INTEGER NOT NULL DEFAULT 0,
+            UNIQUE(player_name, position)
+        )
+    ''')
+    
+    # Player profiles (kicking role, rank, notes)
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS player_profiles (
+            player_name TEXT PRIMARY KEY,
+            kicking_role TEXT DEFAULT 'unknown',
+            kicking_sub_rank INTEGER DEFAULT 99,
+            notes TEXT
         )
     ''')
     
@@ -1182,6 +1204,94 @@ def set_setting(key, value):
     c.execute('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', (key, value))
     conn.commit()
     conn.close()
+
+
+# ========== Player Profile Routes ==========
+KICKING_ROLES = ['leadoff', 'table_setter', 'contact', 'power', 'middle', 'back', 'unknown']
+KICKING_ROLE_ORDER = {role: i for i, role in enumerate(KICKING_ROLES)}
+
+
+@app.route('/api/player-profiles', methods=['GET'])
+@login_required
+def get_player_profiles():
+    conn = get_db()
+    c = conn.cursor()
+    # Get all main roster + subs
+    c.execute('SELECT player_name, is_female FROM main_roster ORDER BY player_name')
+    players = [{'name': row['player_name'], 'isFemale': bool(row['is_female']), 'isSub': False} for row in c.fetchall()]
+    c.execute('SELECT player_name, is_female FROM substitutes ORDER BY player_name')
+    players.extend([{'name': row['player_name'], 'isFemale': bool(row['is_female']), 'isSub': True} for row in c.fetchall()])
+
+    # Get profiles
+    c.execute('SELECT player_name, kicking_role, kicking_sub_rank, notes FROM player_profiles')
+    profiles = {row['player_name']: {
+        'kickingRole': row['kicking_role'],
+        'kickingSubRank': row['kicking_sub_rank'],
+        'notes': row['notes'],
+    } for row in c.fetchall()}
+
+    # Get position abilities
+    c.execute('SELECT player_name, position, ability FROM player_positions')
+    positions = {}
+    for row in c.fetchall():
+        if row['player_name'] not in positions:
+            positions[row['player_name']] = {}
+        positions[row['player_name']][row['position']] = row['ability']
+
+    conn.close()
+
+    for p in players:
+        name = p['name']
+        prof = profiles.get(name, {})
+        p['kickingRole'] = prof.get('kickingRole', 'unknown')
+        p['kickingSubRank'] = prof.get('kickingSubRank', 99)
+        p['notes'] = prof.get('notes', '')
+        p['positions'] = positions.get(name, {})
+
+    return jsonify({
+        'players': players,
+        'fieldPositions': [p for p in POSITIONS if p != 'Out'],
+        'kickingRoles': KICKING_ROLES,
+    })
+
+
+@app.route('/api/player-profiles/<name>', methods=['PUT'])
+@login_required
+def update_player_profile(name):
+    data = request.json
+    conn = get_db()
+    c = conn.cursor()
+
+    # Update profile
+    role = data.get('kickingRole', 'unknown')
+    sub_rank = data.get('kickingSubRank', 99)
+    notes = data.get('notes', '')
+    c.execute('INSERT OR REPLACE INTO player_profiles (player_name, kicking_role, kicking_sub_rank, notes) VALUES (?, ?, ?, ?)',
+              (name, role, sub_rank, notes))
+
+    # Update position abilities
+    pos_data = data.get('positions', {})
+    for position, ability in pos_data.items():
+        c.execute('INSERT OR REPLACE INTO player_positions (player_name, position, ability) VALUES (?, ?, ?)',
+                  (name, position, int(ability)))
+
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True})
+
+
+@app.route('/api/games/<int:game_id>/generate-lineup', methods=['POST'])
+@login_required
+def generate_game_lineup(game_id):
+    """Auto-generate a lineup for a game based on player profiles."""
+    try:
+        lineup, kicking_order = lineup_generator.generate_lineup(game_id)
+        if not lineup:
+            return jsonify({'error': 'No players marked IN for this game'}), 400
+        lineup_generator.save_generated_lineup(game_id, lineup, kicking_order)
+        return jsonify({'success': True, 'innings': len(lineup), 'players': len(kicking_order)})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/settings', methods=['GET'])

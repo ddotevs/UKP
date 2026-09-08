@@ -570,6 +570,9 @@ function renderGameLineup() {
                     <button class="btn btn-ghost btn-sm" onclick="resetLineup()">
                         Reset Lineup
                     </button>
+                    <button class="btn btn-primary btn-sm" onclick="generateLineup()">
+                        Auto-Generate
+                    </button>
                 </div>
             </div>
             
@@ -1227,6 +1230,16 @@ function renderRoster(roster, substitutes, users = []) {
                 ${usersListHtml || '<p class="text-muted">No users</p>'}
             </div>
         </div>
+        
+        <div class="card roster-section">
+            <div class="card-header">
+                <h3 class="card-title">Player Profiles</h3>
+                <button class="btn btn-secondary btn-sm" onclick="loadPlayerProfiles()">Load / Refresh</button>
+            </div>
+            <div id="playerProfilesContainer" style="padding: 0 var(--space-lg) var(--space-lg);">
+                <p class="text-muted">Click "Load / Refresh" to view and edit player abilities</p>
+            </div>
+        </div>
     `;
 }
 
@@ -1648,6 +1661,124 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+// ========================================
+// Player Profile Functions
+// ========================================
+const ABILITY_LABELS = {0: '-', 1: 'Pinch', 2: 'Good', 3: 'Primary'};
+const ABILITY_CLASSES = {0: '', 1: 'ability-pinch', 2: 'ability-good', 3: 'ability-primary'};
+const ROLE_LABELS = {
+    leadoff: 'Leadoff', table_setter: 'Table Setter', contact: 'Contact',
+    power: 'Power', middle: 'Middle', back: 'Back', unknown: 'Unknown'
+};
+
+async function loadPlayerProfiles() {
+    const container = document.getElementById('playerProfilesContainer');
+    if (!container) return;
+    container.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    
+    try {
+        const data = await api('/api/player-profiles');
+        renderPlayerProfiles(data, container);
+    } catch (error) {
+        container.innerHTML = `<p style="color: var(--danger);">Failed to load: ${escapeHtml(error.message)}</p>`;
+    }
+}
+
+function renderPlayerProfiles(data, container) {
+    const { players, fieldPositions, kickingRoles } = data;
+    const posAbbrevs = {
+        'Pitcher': 'P', 'Catcher': 'C', 'First Base': '1B', 'Second Base': '2B',
+        'Third Base': '3B', 'Short Stop': 'SS', 'Left Field': 'LF', 'Left Center': 'LC',
+        'Center Field': 'CF', 'Right Center': 'RC', 'Right Field': 'RF'
+    };
+    
+    let html = '<div class="profiles-grid-wrapper"><table class="profiles-grid"><thead><tr>';
+    html += '<th>Player</th><th>Role</th>';
+    for (const pos of fieldPositions) {
+        html += `<th title="${pos}">${posAbbrevs[pos] || pos}</th>`;
+    }
+    html += '<th>Notes</th></tr></thead><tbody>';
+    
+    for (const player of players) {
+        const name = player.name;
+        const esc = escapeHtml(name);
+        html += `<tr>`;
+        html += `<td class="profile-name">${esc}${player.isFemale ? ' <span class="gender-indicator">♀</span>' : ''}${player.isSub ? ' <span class="text-muted">(sub)</span>' : ''}</td>`;
+        
+        // Kicking role dropdown
+        html += `<td><select class="profile-select" onchange="savePlayerProfile('${esc}')">`;
+        for (const role of kickingRoles) {
+            html += `<option value="${role}" ${player.kickingRole === role ? 'selected' : ''}>${ROLE_LABELS[role] || role}</option>`;
+        }
+        html += `</select></td>`;
+        
+        // Position ability selectors
+        for (const pos of fieldPositions) {
+            const ability = (player.positions && player.positions[pos]) || 0;
+            html += `<td><select class="ability-select ${ABILITY_CLASSES[ability]}" data-player="${esc}" data-pos="${pos}" onchange="updateAbilityColor(this); savePlayerProfile('${esc}')">`;
+            for (let a = 0; a <= 3; a++) {
+                html += `<option value="${a}" ${ability === a ? 'selected' : ''}>${ABILITY_LABELS[a]}</option>`;
+            }
+            html += `</select></td>`;
+        }
+        
+        // Notes
+        html += `<td><input type="text" class="profile-notes" value="${escapeHtml(player.notes || '')}" data-player="${esc}" onchange="savePlayerProfile('${esc}')" placeholder="..."></td>`;
+        html += `</tr>`;
+    }
+    
+    html += '</tbody></table></div>';
+    container.innerHTML = html;
+}
+
+function updateAbilityColor(select) {
+    select.className = 'ability-select ' + (ABILITY_CLASSES[parseInt(select.value)] || '');
+}
+
+async function savePlayerProfile(playerName) {
+    const positions = {};
+    document.querySelectorAll(`select.ability-select[data-player="${playerName}"]`).forEach(sel => {
+        positions[sel.dataset.pos] = parseInt(sel.value);
+    });
+    
+    const roleSelect = document.querySelector(`tr:has(select.ability-select[data-player="${playerName}"]) select.profile-select`);
+    const notesInput = document.querySelector(`input.profile-notes[data-player="${playerName}"]`);
+    
+    try {
+        await api(`/api/player-profiles/${encodeURIComponent(playerName)}`, {
+            method: 'PUT',
+            body: JSON.stringify({
+                kickingRole: roleSelect ? roleSelect.value : 'unknown',
+                notes: notesInput ? notesInput.value : '',
+                positions: positions,
+            })
+        });
+    } catch (error) {
+        console.error('Failed to save profile:', error);
+    }
+}
+
+async function generateLineup() {
+    if (!state.currentGame) return;
+    if (!confirm('Generate an auto-lineup? This will overwrite the current lineup.')) return;
+    
+    try {
+        const result = await api(`/api/games/${state.currentGame.id}/generate-lineup`, { method: 'POST' });
+        alert(`Lineup generated for ${result.players} players across ${result.innings} innings.`);
+        
+        // Reload the lineup data
+        const lineupData = await api(`/api/games/${state.currentGame.id}/lineup`);
+        state.availablePlayers = lineupData.availablePlayers;
+        state.genders = lineupData.genders;
+        state.lineup = lineupData.lineup;
+        state.sitOutCounts = lineupData.sitOutCounts;
+        
+        renderGameLineup();
+    } catch (error) {
+        alert('Generate lineup failed: ' + error.message);
+    }
 }
 
 // ========================================

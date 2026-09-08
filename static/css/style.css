@@ -1518,3 +1518,64 @@ h4 { font-size: 1.25rem; }
     background: var(--bg-card);
     box-shadow: 0 4px 12px rgba(0,0,0,0.4);
 }
+
+/* Player Profiles Grid */
+.profiles-grid-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.profiles-grid {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8em;
+    white-space: nowrap;
+}
+
+.profiles-grid th,
+.profiles-grid td {
+    border: 1px solid var(--border-color);
+    padding: 4px 6px;
+    text-align: center;
+}
+
+.profiles-grid th {
+    background: var(--bg-tertiary);
+    font-weight: 600;
+    position: sticky;
+    top: 0;
+}
+
+.profiles-grid .profile-name {
+    text-align: left;
+    font-weight: 500;
+    min-width: 100px;
+}
+
+.profile-select,
+.ability-select {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: 2px 4px;
+    font-size: 0.9em;
+    width: 100%;
+    min-width: 60px;
+}
+
+.ability-select { min-width: 55px; }
+
+.ability-pinch { background: rgba(243, 156, 18, 0.2); color: var(--warning); }
+.ability-good { background: rgba(39, 174, 96, 0.2); color: var(--accent-green); }
+.ability-primary { background: rgba(39, 174, 96, 0.4); color: var(--accent-green); font-weight: 600; }
+
+.profile-notes {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: 4px 6px;
+    font-size: 0.9em;
+    width: 120px;
+}

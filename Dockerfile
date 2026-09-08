@@ -15,6 +15,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app.py .
 COPY groupme.py .
 COPY chatbot.py .
+COPY lineup_generator.py .
 COPY scheduler.py .
 COPY static/ ./static/
 
