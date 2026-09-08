@@ -292,10 +292,10 @@ def reminder_post():
         return
 
     gm_map = get_gm_map()
-    # Invert: groupme_user_id -> player_name (main roster only)
+    # Invert: groupme_user_id -> player_name (main roster only, excluding opted-out)
     conn = get_db()
     c = conn.cursor()
-    c.execute('SELECT player_name, groupme_user_id FROM main_roster WHERE groupme_user_id IS NOT NULL')
+    c.execute('SELECT player_name, groupme_user_id FROM main_roster WHERE groupme_user_id IS NOT NULL AND COALESCE(exclude_reminders, 0) = 0')
     id_to_player = {row['groupme_user_id']: row['player_name'] for row in c.fetchall()}
     conn.close()
 

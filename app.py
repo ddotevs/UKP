@@ -268,6 +268,16 @@ def migrate_db():
     except:
         pass
     
+    # Add exclude_reminders column to main_roster if missing
+    try:
+        c.execute("PRAGMA table_info(main_roster)")
+        columns = [row[1] for row in c.fetchall()]
+        if 'exclude_reminders' not in columns:
+            c.execute('ALTER TABLE main_roster ADD COLUMN exclude_reminders BOOLEAN DEFAULT 0')
+            conn.commit()
+    except:
+        pass
+    
     conn.close()
 
 

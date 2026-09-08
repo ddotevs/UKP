@@ -179,8 +179,8 @@ def cmd_non_responders(text):
         conn.close()
         return "No event posted for this game yet."
     event_id = row['groupme_event_id']
-    # Get main roster players with GroupMe IDs
-    c.execute('SELECT player_name, groupme_user_id FROM main_roster WHERE groupme_user_id IS NOT NULL')
+    # Get main roster players with GroupMe IDs (excluding opted-out)
+    c.execute('SELECT player_name, groupme_user_id FROM main_roster WHERE groupme_user_id IS NOT NULL AND COALESCE(exclude_reminders, 0) = 0')
     id_to_player = {row['groupme_user_id']: row['player_name'] for row in c.fetchall()}
     conn.close()
 
