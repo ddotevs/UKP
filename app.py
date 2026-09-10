@@ -1557,7 +1557,13 @@ def render_lineup_image(game_id):
         for inn in range(1, 8):
             pos = lineup.get(inn, {}).get(player, '-')
             abbrev = POSITION_ABBREVIATIONS.get(pos, pos) if pos != '-' else '-'
-            color = '#95A5A6' if pos == 'Out' else '#27AE60' if pos != '-' else '#484F58'
+            if pos == 'Out':
+                draw.rectangle([x, y, x + col_widths[2], y + row_height], fill='#5C1A1A')
+                color = '#FF6B6B'
+            elif pos != '-':
+                color = '#27AE60'
+            else:
+                color = '#484F58'
             draw.text((x + 4, y + 5), abbrev, fill=color, font=font_sm)
             x += col_widths[2]
 

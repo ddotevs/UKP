@@ -484,7 +484,7 @@ function renderGameLineup() {
                 ${publishStatusHtml}
                 <div class="publish-actions">
                     ${publishButtonHtml}
-                    <button class="btn btn-groupme" onclick="postToGroupMe(${state.currentGame.id})" title="Post event and message to GroupMe">
+                    <button class="btn btn-groupme" onclick="postLineupToGroupMe(${state.currentGame.id})" title="Post lineup image to GroupMe">
                         Post to GroupMe
                     </button>
                 </div>
@@ -1009,13 +1009,6 @@ async function publishLineup() {
         // Update local state
         state.currentGame.is_published = true;
         state.currentGame.published_at = new Date().toISOString();
-        
-        // Post lineup image to GroupMe (non-blocking, don't fail publish if this fails)
-        try {
-            await api(`/api/groupme/post-lineup-image/${state.currentGame.id}`, { method: 'POST' });
-        } catch (gmErr) {
-            console.warn('GroupMe image post failed (lineup still published):', gmErr.message);
-        }
         
         // Re-render to show updated status
         renderGameLineup();
@@ -1842,6 +1835,17 @@ async function postToGroupMe(gameId) {
         if (result.results.event) msgs.push(`Event: ${result.results.event}`);
         if (result.results.message) msgs.push(`Message: ${result.results.message}`);
         alert('GroupMe Results:\n' + msgs.join('\n'));
+    } catch (error) {
+        alert('GroupMe error: ' + error.message);
+    }
+}
+
+async function postLineupToGroupMe(gameId) {
+    if (!confirm('Post the lineup image to GroupMe?')) return;
+    
+    try {
+        const result = await api(`/api/groupme/post-lineup-image/${gameId}`, { method: 'POST' });
+        alert('Lineup image posted to GroupMe!');
     } catch (error) {
         alert('GroupMe error: ' + error.message);
     }
