@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import groupme as gm
 import requests as http_requests
+import rules_engine
 
 TZ = ZoneInfo('America/New_York')
 
@@ -44,6 +45,14 @@ def get_gm_map():
     gm_map.update({row['player_name']: row['groupme_user_id'] for row in c.fetchall()})
     conn.close()
     return gm_map
+
+
+def init_rules_engine():
+    """Load kickball rules and build TF-IDF index. Call at app startup."""
+    rules = get_setting('kickball_rules')
+    if rules:
+        rules_engine.build_index(rules)
+
 
 
 # ========================================
@@ -181,7 +190,7 @@ def cmd_non_responders(text):
     event_id = row['groupme_event_id']
     # Get main roster players with GroupMe IDs (excluding opted-out)
     c.execute('SELECT player_name, groupme_user_id FROM main_roster WHERE groupme_user_id IS NOT NULL AND COALESCE(exclude_reminders, 0) = 0')
-    id_to_player = {row['groupme_user_id']: row['player_name'] for row in c.fetchall()}
+    id_to_player = {str(row['groupme_user_id']): row['player_name'] for row in c.fetchall()}
     conn.close()
 
     responses = gm.get_event_respondents(token, group_id, event_id)
@@ -206,7 +215,7 @@ def cmd_non_responders(text):
 # ========================================
 # Sub Needed
 # ========================================
-@command('sub needed', 'need a sub', 'need sub', 'sub request')
+@command('sub needed', 'need a sub', 'need sub', 'sub request', 'subs')
 def cmd_sub_needed(text):
     game = get_next_game()
     if not game:
@@ -218,8 +227,33 @@ def cmd_sub_needed(text):
     date = datetime.strptime(game['game_date'], '%Y-%m-%d')
     game_time = game['game_time'] or get_setting('default_game_time', '7:00 PM')
     park = get_setting('park_name', 'the field')
-    msg = f"SUB NEEDED!\n\nWe need a sub for {date.strftime('%A, %B %-d')} at {game_time} @ {park}.\n\nReply here or DM if you can make it!"
-    # Post to the sub group using the access token (bot can't post to other groups)
+
+    # Parse total players needed: "3 players/total/needed/subs" or just a leading number
+    total_match = re.search(r'(\d+)\s*(?:player|total|needed|sub|people)', text, re.IGNORECASE)
+    if not total_match:
+        # Try bare number before "with" (e.g., "subs 3 with 1 female")
+        total_match = re.search(r'(\d+)\s+with\b', text, re.IGNORECASE)
+    if not total_match:
+        # Try any leading number after trigger word
+        total_match = re.search(r'(?:subs?|needed|request)\s+(\d+)', text, re.IGNORECASE)
+    total_needed = int(total_match.group(1)) if total_match else None
+
+    # Parse females needed: "1 female/lady/girl/woman/women"
+    female_match = re.search(r'(\d+)\s*(?:female|lady|ladies|girl|woman|women)', text, re.IGNORECASE)
+    female_needed = int(female_match.group(1)) if female_match else None
+
+    # Build the message
+    if total_needed and female_needed:
+        need_str = f"We need {total_needed} sub{'s' if total_needed != 1 else ''} ({female_needed} female{'s' if female_needed != 1 else ''})"
+    elif total_needed:
+        need_str = f"We need {total_needed} sub{'s' if total_needed != 1 else ''}"
+    elif female_needed:
+        need_str = f"We need subs ({female_needed} female{'s' if female_needed != 1 else ''})"
+    else:
+        need_str = "We need a sub"
+
+    msg = f"SUB NEEDED!\n\n{need_str} for {date.strftime('%A, %B %-d')} at {game_time} @ {park}.\n\nReply here or DM if you can make it!"
+
     token = get_setting('groupme_access_token')
     if token:
         try:
@@ -385,28 +419,33 @@ def cmd_random_number(text):
     return f"🎲 {random.randint(1, 100)}"
 
 
+RULES_BASE_URL = os.environ.get('APP_BASE_URL', 'https://kickball.danielevans.cc')
+
+
 @command('rule', 'rules', 'rule check', 'is that legal', 'can you')
 def cmd_rules(text):
-    rules = get_setting('kickball_rules')
-    if not rules:
-        return "Rules haven't been loaded yet. Ask your captain to add them!"
-    # Try to find a relevant section based on keywords
-    text_lower = text.lower()
-    keywords = [w for w in text_lower.split() if w not in ('rule', 'rules', 'check', 'what', 'is', 'the', 'a', 'an', 'can', 'you', 'about')]
-    if keywords:
-        lines = rules.split('\n')
-        relevant = []
-        for i, line in enumerate(lines):
-            if any(kw in line.lower() for kw in keywords):
-                # Grab this line and a few around it for context
-                start = max(0, i - 1)
-                end = min(len(lines), i + 3)
-                relevant.extend(lines[start:end])
-                relevant.append('')
-        if relevant:
-            result = '\n'.join(relevant[:20])  # cap at 20 lines
-            return f"Here's what I found:\n\n{result}"
-    return "I have the rules but couldn't find a specific match. Try being more specific (e.g., 'rule check foul ball')"
+    if not rules_engine._ready:
+        rules = get_setting('kickball_rules')
+        if not rules:
+            return "Rules haven't been loaded yet. Ask your captain to add them!"
+        rules_engine.build_index(rules)
+    if not rules_engine._ready:
+        return "Couldn't parse the rules. Ask your captain to check the format."
+
+    # Strip trigger words so they don't skew the TF-IDF search
+    query_text = re.sub(r'\b(rules?|rule\s*check|is\s+that\s+legal|can\s+you)\b', '', text, flags=re.IGNORECASE).strip()
+    if not query_text:
+        return "What rule are you looking for? (e.g., 'rules foul ball' or 'rules kicking')"
+
+    results = rules_engine.query(query_text)
+    if not results:
+        return "I have the rules but couldn't find a match for that. Try rephrasing (e.g., 'rules kicking in front of plate')"
+
+    parts = []
+    for sec_id, sec_text, score in results:
+        link = f"{RULES_BASE_URL}/rules#rule-{sec_id}"
+        parts.append(f"Rule {sec_id}: {sec_text}\n{link}")
+    return "Here's what I found:\n\n" + '\n\n'.join(parts)
 
 
 # ========================================
@@ -436,6 +475,9 @@ FUN
   "flip a coin" - Heads or tails
   "pick a number 1 to 10" - Random number
   "rule check [topic]" - Look up a kickball rule
+
+RULES
+  Full rulebook: https://kickball.danielevans.cc/rules
 
   "help" - This list"""
 

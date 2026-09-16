@@ -14,6 +14,7 @@ import groupme as gm
 from PIL import Image, ImageDraw, ImageFont
 import chatbot
 import lineup_generator
+import rules_engine
 
 app = Flask(__name__, static_folder='static', static_url_path='/static')
 app.secret_key = os.environ.get('SECRET_KEY', 'ukp-kickball-secret-key-change-in-production')
@@ -326,6 +327,9 @@ def get_next_thursday() -> datetime:
 
 # Initialize database
 init_db()
+
+# Preprocess kickball rules for TF-IDF search
+chatbot.init_rules_engine()
 
 
 # ========== Static Routes ==========
@@ -1204,6 +1208,25 @@ def set_setting(key, value):
     c.execute('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', (key, value))
     conn.commit()
     conn.close()
+
+
+# ========== Public Rules Page ==========
+@app.route('/rules')
+def rules_page():
+    return send_from_directory('static', 'rules.html')
+
+
+@app.route('/api/rules', methods=['GET'])
+def get_rules_sections():
+    rules_text = get_setting('kickball_rules')
+    if not rules_text:
+        return jsonify({'sections': [], 'headers': {}})
+    sections = rules_engine._parse_sections(rules_text)
+    headers = rules_engine._parse_headers(rules_text)
+    return jsonify({
+        'sections': [{'id': sid, 'text': text} for sid, text in sections],
+        'headers': headers
+    })
 
 
 # ========== Player Profile Routes ==========

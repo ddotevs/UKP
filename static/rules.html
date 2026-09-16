@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UKP Kickball - Rules</title>
+    <link rel="icon" type="image/png" href="/static/images/logo.png">
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #E84C3D;
+            --primary-hover: #C0392B;
+            --primary-light: rgba(232, 76, 61, 0.15);
+            --secondary: #2C3E50;
+            --accent-green: #27AE60;
+            --bg-primary: #0D1117;
+            --bg-secondary: #161B22;
+            --bg-tertiary: #21262D;
+            --bg-card: #1C2128;
+            --text-primary: #F0F6FC;
+            --text-secondary: #8B949E;
+            --text-muted: #6E7681;
+            --border-color: #30363D;
+            --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+            --highlight: rgba(232, 76, 61, 0.25);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Barlow', -apple-system, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 0 1rem;
+        }
+
+        header {
+            background: var(--bg-secondary);
+            border-bottom: 2px solid var(--primary);
+            padding: 1rem 0;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-content {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .logo {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+        }
+
+        header h1 {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 1.8rem;
+            letter-spacing: 2px;
+            color: var(--text-primary);
+            flex-shrink: 0;
+        }
+
+        header h1 span {
+            color: var(--primary);
+        }
+
+        .search-wrapper {
+            flex: 1;
+            position: relative;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 0.5rem 1rem 0.5rem 2.2rem;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-family: 'Barlow', sans-serif;
+            font-size: 0.9rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .search-input:focus {
+            border-color: var(--primary);
+        }
+
+        .search-input::placeholder {
+            color: var(--text-muted);
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 0.7rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        .search-count {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-top: 0.3rem;
+            min-height: 1rem;
+        }
+
+        .back-link {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.85rem;
+            white-space: nowrap;
+        }
+
+        .back-link:hover {
+            color: var(--primary);
+        }
+
+        main {
+            padding: 1.5rem 0 3rem;
+        }
+
+        .section-group {
+            margin-bottom: 2rem;
+        }
+
+        .section-header {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 1.4rem;
+            letter-spacing: 1.5px;
+            color: var(--primary);
+            padding: 0.5rem 0;
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 0.75rem;
+            position: sticky;
+            top: 80px;
+            background: var(--bg-primary);
+            z-index: 10;
+        }
+
+        .rule-item {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 0.75rem 1rem;
+            margin-bottom: 0.5rem;
+            transition: border-color 0.2s;
+            scroll-margin-top: 90px;
+        }
+
+        .rule-item:hover {
+            border-color: var(--text-muted);
+        }
+
+        .rule-item.highlighted {
+            border-color: var(--primary);
+            background: var(--primary-light);
+        }
+
+        .rule-id {
+            font-weight: 700;
+            color: var(--primary);
+            font-size: 0.85rem;
+            margin-right: 0.5rem;
+            cursor: pointer;
+        }
+
+        .rule-id:hover {
+            text-decoration: underline;
+        }
+
+        .rule-text {
+            color: var(--text-primary);
+            font-size: 0.9rem;
+        }
+
+        .rule-text mark {
+            background: var(--highlight);
+            color: var(--text-primary);
+            border-radius: 2px;
+            padding: 0 2px;
+        }
+
+        .no-results {
+            text-align: center;
+            color: var(--text-muted);
+            padding: 3rem 1rem;
+            font-size: 1rem;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .loading {
+            text-align: center;
+            color: var(--text-secondary);
+            padding: 3rem;
+        }
+
+        @media (max-width: 600px) {
+            .header-content {
+                flex-wrap: wrap;
+            }
+            .search-wrapper {
+                order: 3;
+                flex-basis: 100%;
+            }
+            header h1 { font-size: 1.4rem; }
+            .section-header { top: 110px; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <div class="header-content">
+                <img src="/static/images/logo.png" alt="UKP" class="logo">
+                <h1>UKP <span>Rules</span></h1>
+                <div class="search-wrapper">
+                    <span class="search-icon">&#128269;</span>
+                    <input type="text" class="search-input" id="searchInput" placeholder="Search rules..." autofocus>
+                    <div class="search-count" id="searchCount"></div>
+                </div>
+                <a href="/" class="back-link">&larr; Back</a>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <div class="container">
+            <div id="rulesContent" class="loading">Loading rules...</div>
+        </div>
+    </main>
+
+    <script>
+    (function() {
+        let allSections = [];
+        let headers = {};
+
+        fetch('/api/rules')
+            .then(r => r.json())
+            .then(data => {
+                allSections = data.sections;
+                headers = data.headers;
+                render(allSections);
+                handleHash();
+            })
+            .catch(() => {
+                document.getElementById('rulesContent').innerHTML =
+                    '<div class="no-results">Could not load rules.</div>';
+            });
+
+        function render(sections, query) {
+            const container = document.getElementById('rulesContent');
+            if (!sections.length) {
+                container.innerHTML = '<div class="no-results">No rules loaded yet.</div>';
+                return;
+            }
+
+            const grouped = {};
+            sections.forEach(s => {
+                const parent = s.id.split('.')[0];
+                if (!grouped[parent]) grouped[parent] = [];
+                grouped[parent].push(s);
+            });
+
+            let html = '';
+            const parentNums = Object.keys(grouped).sort((a, b) => parseInt(a) - parseInt(b));
+            parentNums.forEach(num => {
+                const headerText = headers[num] || '';
+                html += `<div class="section-group" id="section-${num}">`;
+                html += `<div class="section-header">${num}. ${headerText}</div>`;
+                grouped[num].forEach(s => {
+                    const text = query ? highlightText(s.text, query) : escapeHtml(s.text);
+                    html += `<div class="rule-item" id="rule-${s.id}">`;
+                    html += `<span class="rule-id" onclick="copyLink('${s.id}')">${s.id}</span>`;
+                    html += `<span class="rule-text">${text}</span>`;
+                    html += `</div>`;
+                });
+                html += `</div>`;
+            });
+
+            container.innerHTML = html;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function highlightText(text, query) {
+            const escaped = escapeHtml(text);
+            const words = query.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+            if (!words.length) return escaped;
+            const pattern = words.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+            const re = new RegExp(`(${pattern})`, 'gi');
+            return escaped.replace(re, '<mark>$1</mark>');
+        }
+
+        const searchInput = document.getElementById('searchInput');
+        const searchCount = document.getElementById('searchCount');
+        let debounceTimer;
+
+        searchInput.addEventListener('input', function() {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => {
+                const query = this.value.trim();
+                if (!query) {
+                    render(allSections);
+                    searchCount.textContent = '';
+                    return;
+                }
+                const words = query.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+                if (!words.length) {
+                    render(allSections, query);
+                    searchCount.textContent = '';
+                    return;
+                }
+                const filtered = allSections.filter(s => {
+                    const text = s.text.toLowerCase();
+                    return words.some(w => text.includes(w));
+                });
+                render(filtered, query);
+                searchCount.textContent = `${filtered.length} of ${allSections.length} rules`;
+                if (!filtered.length) {
+                    document.getElementById('rulesContent').innerHTML =
+                        '<div class="no-results">No matching rules found.</div>';
+                }
+            }, 200);
+        });
+
+        function handleHash() {
+            const hash = window.location.hash;
+            if (!hash) return;
+            const el = document.getElementById(hash.slice(1));
+            if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                el.classList.add('highlighted');
+                setTimeout(() => el.classList.remove('highlighted'), 3000);
+            }
+        }
+
+        window.addEventListener('hashchange', handleHash);
+
+        window.copyLink = function(ruleId) {
+            const url = window.location.origin + '/rules#rule-' + ruleId;
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(url);
+            }
+            const el = document.getElementById('rule-' + ruleId);
+            if (el) {
+                el.classList.add('highlighted');
+                setTimeout(() => el.classList.remove('highlighted'), 1500);
+            }
+            window.location.hash = 'rule-' + ruleId;
+        };
+    })();
+    </script>
+</body>
+</html>

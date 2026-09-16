@@ -16,6 +16,7 @@ COPY app.py .
 COPY groupme.py .
 COPY chatbot.py .
 COPY lineup_generator.py .
+COPY rules_engine.py .
 COPY scheduler.py .
 COPY static/ ./static/
 
